@@ -23,7 +23,7 @@ def extract_functions_from_patch(input_diff: str):
         if current_file is None or hunk_old_start is None:
             return
         count = hunk_old_count if hunk_old_count is not None else 1
-        results.setdefault(current_file, []).append([hunk_old_start, count])
+        results.setdefault(current_file, []).append([hunk_old_start, hunk_old_start + count])
         # Reset hunk state
         in_hunk = False
         hunk_old_start = None
