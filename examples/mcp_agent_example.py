@@ -34,7 +34,7 @@ async def main():
         "mcpServers": {
             "semantic-code-search": {
                 "command": "uv",
-                "args": ["run", "python", "src/mcp_server/semantic_search_server.py"],
+                "args": ["run", "python", "src/mcp_server/training_semantic_search_server.py"],
                 "env": {}
             }
         }
