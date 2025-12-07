@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
 #SBATCH -t 2-00:00:00
-#SBATCH --job-name=rl_qwen3_8b
+#SBATCH --job-name=rl_qwen3_4b
 #SBATCH --error=/home/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
 #SBATCH --output=/home/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
 #SBATCH --nodes=1
