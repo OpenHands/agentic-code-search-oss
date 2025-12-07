@@ -47,7 +47,8 @@ from openhands.sdk import (
 
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
-from src.rewards.file_localization import file_localization_f1_reward
+from src.rewards.file_localization import file_localization_f1_reward, compute_file_f1_score
+from src.rewards.module_rewards import get_simple_results_from_raw_outputs
 import logging
 import signal
 
@@ -95,11 +96,7 @@ def init_and_run(
         else:
             temperature = 1.0
 
-        agent = None
         final_message = ""
-        reward = 0
-        reward_dict = {}
-        error = None
         messages = []
 
         # Configure semantic search if enabled
@@ -168,7 +165,7 @@ def init_and_run(
                     "include_stop_str_in_output": True,
                 }
             ),
-            "tools": get_default_tools(enable_browser=False),
+            "tools": get_planning_tools(),
             "security_analyzer": None,
         }
         
@@ -184,7 +181,7 @@ def init_and_run(
             visualizer=None,
             workspace=str(working_dir),
         )
-        
+        #prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
         prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_localization.j2")
         input_message = get_instruction(instance, prompt_path, str(working_dir))
         
@@ -208,63 +205,14 @@ def init_and_run(
         
         conversation.send_message(input_message)
         print("Starting conversation...")
-        
-        try:
-            class TimeoutError(Exception):
-                pass
+        logger.info("Conversation Starting")
+        conversation.run()
 
-            def timeout_handler(signum, frame):
-                raise TimeoutError("Operation timed out")
+        messages = list(map(lambda event: event.model_dump(), conversation.state.events))
+        final_message = get_agent_final_response(conversation.state.events)
 
-            signal.signal(signal.SIGALRM, timeout_handler)
-            signal.alarm(60*10)  # 10 minute timeout
-
-            logger.info("Conversation Starting")
-            conversation.run()
-        except TimeoutError as e:
-            logger.error(f"Conversation timed out: {e}")
-            error = f"Timeout: {str(e)}"
-        except Exception as e:
-            logger.error(f"Error in conversation: {e}", exc_info=True)
-            error = str(e) + "\n" + traceback.format_exc()
-        finally:
-            signal.alarm(0)
-            conversation.close()
-            logger.info("Conversation Finished")
-
-            messages = list(map(lambda event: event.model_dump(), conversation.state.events))
-            
-            # Truncate messages
-            MAX_MESSAGES = 100
-            if len(messages) > MAX_MESSAGES:
-                original_len = len(messages)
-                messages = messages[-MAX_MESSAGES:]
-                print(f"[Episode {instance_id}] Truncated messages from {original_len} to {MAX_MESSAGES}")
-            
-            final_message = get_agent_final_response(conversation.state.events)
-
-        try:
-            reward_file = file_localization_f1_reward(final_message, instance)
-
-            def multiturn_reward(messages):
-                token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
-                if len(token_messages) > 1:
-                    return 1.0
-                return 0.0
-
-            reward_multiturn = multiturn_reward(messages)
-            reward = reward_file + reward_multiturn
-            reward_dict = {"file_localization_f1": reward_file, "multiturn_reward": reward_multiturn}
-        except Exception as e:
-            reward = 0.0
-            reward_dict = {"file_localization_f1": 0.0, "multiturn_reward": 0.0}
-        
-        return (
-            (messages, final_message),
-            (reward, reward_dict),
-            error,
-        )
-    
+        conversation.close()
+        logger.info("Conversation Finished")
     finally:
         # Cleanup workspace and index
         print(f"[Worker {worker_id}] Cleaning up episode {instance_id}")
@@ -284,6 +232,10 @@ def init_and_run(
                 print(f"[Worker {worker_id}] Removed index: {index_path}")
             except Exception as e:
                 print(f"[Worker {worker_id}] Warning: Could not remove index: {e}")
+    return messages, final_message
+
+           
+    
                 
 class CodeSearchGenerator(SkyRLGymGenerator):
     def __init__(
@@ -310,7 +262,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.tokenizer = tokenizer
         self.model_name = model_name
         # self.litellm_model_name = "openai/" + self.model_name
-        self.litellm_model_name = "hosted_vllm/" + self.model_name
+        self.litellm_model_name = "litellm_proxy/" + self.model_name
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError(
@@ -327,9 +279,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
     ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]]]:
+        # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
+        # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
+        instance = env_extras
+        error = None
         try:
-            (messages, final_message), (reward, reward_dict), error = await init_and_run.remote(
-                env_extras,
+
+            messages, final_message = await init_and_run.remote(
+                instance,
                 self.litellm_model_name,
                 self.base_url,
                 self.generator_cfg,
@@ -339,54 +296,123 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 batch_metadata.global_step,
                 batch_metadata.training_phase,
             )
+        except Exception as e:
+            logger.error(f"Error in starting conversation: {e}", exc_info=True)
+            # TODO properly handle this
+            error = str(e) + "\n" + traceback.format_exc()
+            messages = []
+            final_message = ""
 
+        print("=" * 100)
+        print("Conversation finished. Got the following LLM messages:")
+        for i, message in enumerate(messages):
+            print(f"Message {i}: {str(message)[:100]}")
+        print("Final message:", final_message)
+
+        # Reward Manager
+        reward = 0
+        reward_dict = {}
+
+        def multiturn_reward(messages):
             token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
+            if len(token_messages) > 1:
+                return 1.0
+            return 0.0
 
-            stop_reason = "complete"
-            prompt_ids_list = []
-            response_ids_list = []
-            trajectory_ids_list = []
-            loss_mask = []
-            initial_input_len = 0
-            past_trajectory_len = 0
-            
+        reward_multiturn = multiturn_reward(messages)
+        reward_dict["multiturn_reward"] = reward_multiturn
+        reward += reward_multiturn
+
+        all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(final_message)
+        true_files = set(x[0] for x in ast.literal_eval(instance["target"]))
+        # reward_file = file_localization_f1_reward(instance, final_message)
+        reward_file = compute_file_f1_score(all_found_files, true_files)
+        reward_dict["file_localization_f1"] = reward_file
+        # reward_file = file_localization_f1_reward(final_message, instance, working_dir=working_dir)
+        reward += reward_file
+
+        print(f"Reward details: {reward_dict}, Total reward: {reward}")
+
+        # import sys; sys.exit()
+
+        #     # print("=" * 100)
+        #     # print("Conversation finished. Got the following LLM messages:")
+        #     # for i, message in enumerate(messages):
+        #     #     print(f"Message {i}: {str(message)[:200]}")
+
+        token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
+        rollout_list = []
+        gamma = 0.9
+        num_steps = len(token_messages)
+        if len(token_messages) > 0:
             for idx, message in enumerate(token_messages):
                 current_prompt_ids = message["prompt_token_ids"]
                 current_response_ids = message["response_token_ids"]
+                step_reward = reward * gamma**(num_steps - idx - 1)
 
-                prompt_ids_list.append(current_prompt_ids)
-                response_ids_list.append(current_response_ids)
-                trajectory_ids_list.append(current_prompt_ids + current_response_ids)
+                rollout_list.append(
+                    (
+                        current_response_ids,
+                        step_reward,
+                        "complete",
+                        [1]*len(current_response_ids),
+                        current_prompt_ids,
+                        None
+                    )
+                )
 
-                if idx == 0:
-                    initial_input_ids = current_prompt_ids
-                    initial_input_len = len(initial_input_ids)
-                    loss_mask = [1] * len(current_response_ids)
-                    continue
-
-                past_trajectory_len = len(trajectory_ids_list[idx-1])
-                past_response_len = len(response_ids_list[idx-1])
-                current_prompt_len = len(current_prompt_ids)
-                current_response_len = len(current_response_ids)
-
-                past_response_observation_ids = current_prompt_ids[past_trajectory_len:]
-                past_response_observation_len = len(past_response_observation_ids)
-                loss_mask.extend([0] * past_response_observation_len)
-                loss_mask.extend([1] * current_response_len)
-            
-            response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
-            assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
-
-        except Exception as e:
-            logger.error(f"Error in code_search_loop: {e}", exc_info=True)
-            error = str(e) + "\n" + traceback.format_exc()
-            reward = 0
+        else:
             response_ids = [151643]
             stop_reason = "error"
             loss_mask = [1]
             initial_input_ids = [151643]
-            final_message = ""
-            reward_dict = {"file_localization_f1": 0.0, "multiturn_reward": 0.0}
+            rollout_list.append(
+                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
+            )
+
+
+        #     stop_reason = "complete"
+        #     prompt_ids_list = []
+        #     response_ids_list = []
+        #     trajectory_ids_list = []
+        #     loss_mask = []
+        #     initial_input_len = 0
+        #     past_trajectory_len = 0
+        #     for idx, message in enumerate(token_messages):
+        #         current_prompt_ids = message["prompt_token_ids"]
+        #         current_response_ids = message["response_token_ids"]
+
+        #         prompt_ids_list.append(current_prompt_ids)
+        #         response_ids_list.append(current_response_ids)
+        #         trajectory_ids_list.append(current_prompt_ids + current_response_ids)
+
+        #         if idx == 0:
+        #             initial_input_ids = current_prompt_ids
+        #             initial_input_len = len(initial_input_ids)
+        #             loss_mask = [1] * len(current_response_ids)
+        #             continue
+
+        #         past_trajectory_len = len(trajectory_ids_list[idx-1])
+        #         past_response_len = len(response_ids_list[idx-1])
+        #         current_prompt_len = len(current_prompt_ids)
+        #         current_response_len = len(current_response_ids)
+
+        #         # print("idx:", idx)
+        #         # print("initial_input_ids_len:", initial_input_len)
+        #         # print("past_trajectory_len:", past_trajectory_len)
+        #         # print("past_response_len:", past_response_len)
+        #         # print("current_prompt_len:", current_prompt_len)
+        #         # print("current_response_len:", current_response_len)
+
+        #         # past_prompt_len = len(prompt_ids_list[idx-1]) if idx > 0 else 0
+        #         past_response_observation_ids = current_prompt_ids[past_trajectory_len:]
+        #         past_response_observation_len = len(past_response_observation_ids)
+        #         # print("past_response_observation_len:", past_response_observation_len)
+        #         loss_mask.extend([0] * past_response_observation_len)
+        #         loss_mask.extend([1] * current_response_len)
+            
+        #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
+        #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
 
         path = Path(self.generator_cfg.traj_dir) / f"step_{batch_metadata.global_step}" / batch_metadata.training_phase
         path.mkdir(parents=True, exist_ok=True)
@@ -404,8 +430,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
             result_dict = {
                 "target": env_extras["target"],
-                "final_message": final_message,
                 "reward_dict": reward_dict,
+                "final_message": final_message,
                 "messages": messages,
             }
 
@@ -413,7 +439,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             with open(filename_path, "w") as f:
                 json.dump(result_dict, f, indent=2)
 
-        return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
+        # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
+        return rollout_list[0]
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
         """
@@ -437,6 +464,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         tasks = []
 
+        # rollout_contains_multiple = True
+        rollout_contains_multiple = False
         for i in range(len(prompts)):
             rollout = self.code_search_loop(
                     prompts[i],
@@ -448,12 +477,19 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     batch_metadata=batch_metadata,
                 )
             
-            if True:
-                tasks.append(rollout)
-            else:
-                tasks.extend(rollout)
+            tasks.append(rollout)
 
         all_outputs = await asyncio.gather(*tasks)
+
+        # if rollout_contains_multiple:
+        #     flattened_outputs = []
+        #     for output in all_outputs:
+        #         flattened_outputs.extend(output)
+        #     all_outputs = flattened_outputs
+
+        # print("all_outputs length:", len(all_outputs))
+        # print("all_outputs")
+        # print(all_outputs)
 
         # Filter out the `None` entries, which means that trajectory generation failed
         responses = [output[0] for output in all_outputs if output[0] is not None]
