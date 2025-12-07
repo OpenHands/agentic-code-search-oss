@@ -48,7 +48,7 @@ DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
 CKPT_PATH="/data/user_data/sanidhyv/grep/train"
 N_ROLLOUTS="${N_ROLLOUTS:-8}"
 MAX_LENGTH=2048
-export WANDB_API_KEY=bd054e89bc6dc33ce731d090da4a87bffa973032
+export WANDB_API_KEY=""
 export WANDB_PROJECT="grep"
 
 # Resource allocation 
