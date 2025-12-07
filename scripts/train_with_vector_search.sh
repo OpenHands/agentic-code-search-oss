@@ -46,8 +46,7 @@ MODEL="Qwen/Qwen3-4B"
 MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
 CKPT_PATH="/data/user_data/sanidhyv/grep/train"
-N_ROLLOUTS="${N_ROLLOUTS:-8}"
-MAX_LENGTH=2048
+N_ROLLOUTS="${N_ROLLOUTS:-4}"
 export WANDB_API_KEY=""
 export WANDB_PROJECT="grep"
 
@@ -68,7 +67,6 @@ mkdir -p /data/user_data/sanidhyv/ray_spill
 
 echo "Starting RL Training (Working Config)"
 echo "Model: $MODEL"
-echo "Max Length: $MAX_LENGTH"
 echo "N Rollouts: $N_ROLLOUTS"
 echo "======================================"
 
