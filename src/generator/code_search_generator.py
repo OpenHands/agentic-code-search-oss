@@ -46,8 +46,7 @@ from openhands.sdk import (
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
 from src.rewards import get_reward_function
-# from src.rewards.file_localization import file_localization_f1_reward, compute_file_f1_score
-# from src.rewards.module_rewards import get_simple_results_from_raw_outputs
+
 import logging
 import signal
 
