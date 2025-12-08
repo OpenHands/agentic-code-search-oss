@@ -349,10 +349,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             self.generator_cfg.backend, self.generator_cfg.sampling_params
         )
 
-        tasks = []
-
-        # rollout_contains_multiple = True
-        rollout_contains_multiple = False
+        task_rollouts = []
         for i in range(len(prompts)):
             rollout = self.code_search_loop(
                     prompts[i],
@@ -364,12 +361,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     batch_metadata=batch_metadata,
                 )
             
-            tasks.append(rollout)
+            task_rollouts.append(rollout)
 
-        all_outputs = await asyncio.gather(*tasks)
+        collected_task_rollouts = await asyncio.gather(*task_rollouts)
 
-        reward_dict = [output[1] for output in all_outputs]
-        all_outputs = [output[0] for output in all_outputs]
+        reward_dict = [rollout[1] for rollout in collected_task_rollouts]
+        all_outputs = [rollout[0] for rollout in collected_task_rollouts]
 
         # Filter out the `None` entries, which means that trajectory generation failed
         responses = [output[0] for output in all_outputs if output[0] is not None]
