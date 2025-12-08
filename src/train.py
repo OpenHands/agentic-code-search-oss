@@ -68,6 +68,13 @@ def main(cfg: DictConfig) -> None:
     # validate the arguments
     validate_cfg(cfg)
 
+    # Check cfg.generator.reward if it exists or not
+    if hasattr(cfg.generator, "reward"):
+        # Open yaml file and print its contents
+        with open(cfg.generator.reward, "r") as f:
+            reward_cfg = OmegaConf.load(f)
+        cfg.generator.reward = reward_cfg.reward
+
     initialize_ray(cfg)
     ray.get(skyrl_entrypoint.remote(cfg))
 
