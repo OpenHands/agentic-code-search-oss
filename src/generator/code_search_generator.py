@@ -72,9 +72,11 @@ def init_and_run(
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
-    workspace = Path("/tmp/testbed/")
+    
+    # Avoid collisions in /tmp testbed directories
+    uuid_str = str(uuid.uuid4())[:8]
+    workspace = Path(f"/scratch/lsutawik/tmp/testbed/{uuid_str}/")
     status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
-    print("working_dir:", working_dir)
 
     if training_phase == "eval":
         temperature = 0.6
@@ -89,7 +91,6 @@ def init_and_run(
             service_id="agent",
             model=litellm_model_name,
             base_url=f"http://localhost:8080/v1/",
-            # api_key=os.getenv("API_KEY"),
             api_key="sk-xxx",
             temperature=temperature,
             litellm_extra_body={
@@ -98,9 +99,6 @@ def init_and_run(
             }
         ),
         tools=get_planning_tools(),
-        # tools=get_default_tools(enable_browser=False),
-        # system_prompt_filename=os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "system_message_search.j2"),
-        # system_prompt_filename=os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2"),
         security_analyzer=None,
     )
 
@@ -114,7 +112,7 @@ def init_and_run(
     prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
     input_message = get_instruction(instance, prompt_path, str(working_dir))
     conversation.send_message(input_message)
-    print("Starting conversation...")
+
     logger.info("Conversation Starting")
     conversation.run()
 
@@ -195,11 +193,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             messages = []
             final_message = ""
 
-        print("=" * 100)
-        print("Conversation finished. Got the following LLM messages:")
-        for i, message in enumerate(messages):
-            print(f"Message {i}: {str(message)[:100]}")
-        print("Final message:", final_message)
+        # print("=" * 100)
+        # print("Conversation finished. Got the following LLM messages:")
+        # for i, message in enumerate(messages):
+        #     print(f"Message {i}: {str(message)[:100]}")
+        # print("Final message:", final_message)
 
         # Reward Manager
         reward = 0
@@ -224,13 +222,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         reward += reward_file
 
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
-
-        # import sys; sys.exit()
-
-        #     # print("=" * 100)
-        #     # print("Conversation finished. Got the following LLM messages:")
-        #     # for i, message in enumerate(messages):
-        #     #     print(f"Message {i}: {str(message)[:200]}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
@@ -332,7 +323,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
 
         # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
-        return rollout_list[0]
+        return [rollout_list[-1], reward_dict]
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
         """
@@ -373,15 +364,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         all_outputs = await asyncio.gather(*tasks)
 
-        # if rollout_contains_multiple:
-        #     flattened_outputs = []
-        #     for output in all_outputs:
-        #         flattened_outputs.extend(output)
-        #     all_outputs = flattened_outputs
-
-        # print("all_outputs length:", len(all_outputs))
-        # print("all_outputs")
-        # print(all_outputs)
+        reward_dict = [output[1] for output in all_outputs]
+        all_outputs = [output[0] for output in all_outputs]
 
         # Filter out the `None` entries, which means that trajectory generation failed
         responses = [output[0] for output in all_outputs if output[0] is not None]
@@ -397,6 +381,19 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             )
         rollout_metrics = get_rollout_metrics(responses, rewards)
 
+        # This is supposedly where I can add custom wandb logs
+        reward_metrics = {}
+        for reward_dict_item in reward_dict:
+            for k, v in reward_dict_item.items():
+                if f"environment/{k}" not in reward_metrics:
+                    reward_metrics[f"environment/{k}"] = []
+                reward_metrics[f"environment/{k}"].append(v)
+
+        # Average the reward metrics over the batch
+        for k, v in reward_metrics.items():
+            reward_metrics[k] = sum(v) / len(v)
+        rollout_metrics = {**rollout_metrics, **reward_metrics}
+
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
             "response_ids": responses,
@@ -406,5 +403,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "rollout_metrics": rollout_metrics,
             "rollout_logprobs": None,
         }
+        # print("full rollout_metrics", generator_output["rollout_metrics"])
 
         return generator_output
