@@ -203,14 +203,20 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         reward = 0
         reward_dict = {}
 
-        for reward in self.skyrl_gym_cfg.reward_manager:
+        for reward_fn_args in self.generator_cfg.reward:
             input_args = {
                 "final_message": final_message,
                 "messages": messages,
                 "instance": instance,
             }
 
-            reward_fn = get_reward_function(reward)
+            reward_fn = get_reward_function(reward_fn_args["fn"])
+
+            input_args = {
+                **input_args, 
+                **reward_fn_args.get("args", {})
+                }
+
             reward_outputs = reward_fn(**input_args)
             if isinstance(reward_outputs, tuple):
                 reward_value, reward_items = reward_outputs
