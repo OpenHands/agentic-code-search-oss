@@ -13,12 +13,13 @@
 
 . .env
 
-while getopts ":m:n:d:s:" opt; do
+while getopts ":m:n:d:s:o:" opt; do
   case ${opt} in
     m ) MODEL=$OPTARG;;
     n ) N_ROLLOUTS=$OPTARG;;
     d ) DATA_PATH=$OPTARG;;
     s ) CKPT_PATH=$OPTARG;;
+    o ) OTHER_OPTION=$OPTARG;;
     # \? ) echo "Usage: cmd [-u] [-p]";;
   esac
 done
@@ -54,12 +55,12 @@ uv run --isolated --frozen -m src.train \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
   trainer.fully_async.num_parallel_generation_workers=20 \
-  trainer.placement.policy_num_gpus_per_node=2 \
-  trainer.placement.ref_num_gpus_per_node=2 \
+  trainer.placement.policy_num_gpus_per_node=1 \
+  trainer.placement.ref_num_gpus_per_node=1 \
   trainer.placement.policy_num_nodes=1 \
   trainer.placement.ref_num_nodes=1 \
   trainer.policy.sequence_parallel_size=1 \
-  generator.num_inference_engines=6 \
+  generator.num_inference_engines=1 \
   generator.inference_engine_tensor_parallel_size=1 \
   +generator.traj_dir=$CKPT_PATH/trajectories/ \
   +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,reasoning_parser:qwen3}" \
@@ -96,4 +97,5 @@ uv run --isolated --frozen -m src.train \
   trainer.project_name="code_search" \
   trainer.run_name=${RUN_NAME} \
   trainer.resume_mode=latest \
-  trainer.ckpt_path="$CKPT_PATH"
+  trainer.ckpt_path="$CKPT_PATH" \
+  $OTHER_OPTION
