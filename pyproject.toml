@@ -29,6 +29,7 @@ include = ["src", "software-agent-sdk"]
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0.2",
     "pre-commit>=4.3.0",
     "psutil>=7.0.0",
     "pyright>=1.1.405",
