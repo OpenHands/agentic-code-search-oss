@@ -45,8 +45,9 @@ from openhands.sdk import (
 
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
-from src.rewards.file_localization import file_localization_f1_reward, compute_file_f1_score
-from src.rewards.module_rewards import get_simple_results_from_raw_outputs
+from src.rewards import get_reward_function
+# from src.rewards.file_localization import file_localization_f1_reward, compute_file_f1_score
+# from src.rewards.module_rewards import get_simple_results_from_raw_outputs
 import logging
 import signal
 
@@ -203,23 +204,27 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         reward = 0
         reward_dict = {}
 
-        def multiturn_reward(messages):
-            token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
-            if len(token_messages) > 1:
-                return 1.0
-            return 0.0
+        for reward in self.skyrl_gym_cfg.reward_manager:
+            input_args = {
+                "final_message": final_message,
+                "messages": messages,
+                "instance": instance,
+            }
 
-        reward_multiturn = multiturn_reward(messages)
-        reward_dict["multiturn_reward"] = reward_multiturn
-        reward += reward_multiturn
+            reward_fn = get_reward_function(reward)
+            reward_outputs = reward_fn(**input_args)
+            if isinstance(reward_outputs, tuple):
+                reward_value, reward_items = reward_outputs
+            else:
+                reward_value = reward_outputs
+                reward_items = {reward: reward_value}
 
-        all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(final_message)
-        true_files = set(x[0] for x in ast.literal_eval(instance["target"]))
-        # reward_file = file_localization_f1_reward(instance, final_message)
-        reward_file = compute_file_f1_score(all_found_files, true_files)
-        reward_dict["file_localization_f1"] = reward_file
-        # reward_file = file_localization_f1_reward(final_message, instance, working_dir=working_dir)
-        reward += reward_file
+            reward += reward_value
+
+            reward_dict = {
+                **reward_dict,
+                **reward_items,
+            }
 
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
