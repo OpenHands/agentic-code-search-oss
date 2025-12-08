@@ -74,6 +74,11 @@ def main(cfg: DictConfig) -> None:
         with open(cfg.generator.reward, "r") as f:
             reward_cfg = OmegaConf.load(f)
         cfg.generator.reward = reward_cfg.reward
+    else:
+        cfg.generator.reward = [
+            {"fn": "multiturn_reward"},
+            {"fn": "file_localization_f1_reward"},
+        ]
 
     initialize_ray(cfg)
     ray.get(skyrl_entrypoint.remote(cfg))
