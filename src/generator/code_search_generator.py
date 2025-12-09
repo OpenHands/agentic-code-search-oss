@@ -1,23 +1,17 @@
 import json
 import asyncio
-from pyexpat.errors import messages
-from socket import timeout
 from typing import Dict, List, Optional, Any, Tuple, Union
 import uuid
 from omegaconf import DictConfig
 import traceback
 import ray
-import requests
 from pathlib import Path
 import os
-import ast
 import time
 from datetime import datetime
 import numpy as np
 from collections import defaultdict
 
-import signal
-from contextlib import contextmanager
 
 from skyrl_train.generators.skyrl_gym_generator import (
     SkyRLGymGenerator,
@@ -30,23 +24,14 @@ from skyrl_train.inference_engines.inference_engine_client import InferenceEngin
 from skyrl_train.inference_engines.utils import get_sampling_params_for_backend
 from skyrl_train.generators.utils import (
     get_rollout_metrics,
-    encode_messages_subset,
 )
-from openhands.tools.preset.default import get_default_agent
 
 from openhands.sdk.conversation.response_utils import get_agent_final_response
-from openhands.workspace import DockerWorkspace
-from openhands.tools.preset.default import get_default_tools
 from openhands.tools.preset.planning import get_planning_tools
-from openhands.tools.terminal import TerminalTool
-from openhands.sdk.tool import Tool
 from openhands.sdk import (
     Agent,
     LLM,
-    Event,
     Conversation,
-    RemoteConversation,
-    LLMConvertibleEvent,
     get_logger,
 )
 
@@ -59,13 +44,13 @@ from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
 
 import logging
-import signal
 
 logger = get_logger(__name__)
 # logger.setLevel(logging.WARNING)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
+
 
 @ray.remote(num_cpus=0.01)
 def init_and_run(
@@ -79,11 +64,10 @@ def init_and_run(
     global_step: int,
     training_phase: Union[TrainingPhase, Any],
 ):
-
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
-    
+
     # Avoid collisions in /tmp testbed directories
     uuid_str = str(uuid.uuid4())[:8]
     workspace = Path(f"/scratch/lsutawik/tmp/testbed/{uuid_str}/")
@@ -101,13 +85,13 @@ def init_and_run(
         llm=LLM(
             service_id="agent",
             model=litellm_model_name,
-            base_url=f"http://localhost:8080/v1/",
+            base_url="http://localhost:8080/v1/",
             api_key="sk-xxx",
             temperature=temperature,
             litellm_extra_body={
                 "return_token_ids": True,
                 "include_stop_str_in_output": True,
-            }
+            },
         ),
         tools=get_planning_tools(),
         # tools=[Tool(name=TerminalTool.name)],
@@ -122,7 +106,9 @@ def init_and_run(
         workspace=str(working_dir),
     )
     # prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_localization.j2")
-    prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
+    prompt_path = os.path.join(
+        os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2"
+    )
     input_message = get_instruction(instance, prompt_path, str(working_dir))
     conversation.send_message(input_message)
 
@@ -148,7 +134,7 @@ def init_and_run(
     additional_attr = {
         "wall_clock_duration": wall_clock_duration,
         "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp
+        "end_timestamp": end_timestamp,
     }
 
     return messages, final_message, additional_attr
@@ -182,9 +168,85 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.litellm_model_name = "litellm_proxy/" + self.model_name
 
         if self.generator_cfg.chat_template.name_or_path is not None:
-            raise NotImplementedError(
-                "OpenhandsGenerator doesn't support custom chat template"
-            )
+            raise NotImplementedError("OpenhandsGenerator doesn't support custom chat template")
+
+    def _compute_trajectory_metrics(self, messages: List[Dict[str, Any]]) -> Dict[str, Any]:
+        """
+        Compute trajectory-level metrics including turns and tool calls.
+
+        Args:
+            messages: List of event dictionaries from the conversation
+
+        Returns:
+            Dictionary with trajectory metrics:
+                - num_turns: Number of LLM responses (TokenEvents)
+                - num_tool_calls: Total number of tool calls (ActionEvents)
+                - num_tool_calls_per_turn: Average tool calls per turn
+                - tool_calls_by_turn: List of tool call counts for each turn
+        """
+        # Count turns (TokenEvents)
+        token_messages = [msg for msg in messages if msg.get("kind") == "TokenEvent"]
+        num_turns = len(token_messages)
+
+        # Count tool calls (ActionEvents) and group by llm_response_id for parallel calls
+        action_messages = [msg for msg in messages if msg.get("kind") == "ActionEvent"]
+        num_tool_calls = len(action_messages)
+
+        # Group tool calls by llm_response_id to understand parallel tool calling
+        tool_calls_by_response = defaultdict(int)
+        for action in action_messages:
+            llm_response_id = action.get("llm_response_id")
+            if llm_response_id:
+                tool_calls_by_response[llm_response_id] += 1
+
+        # Get list of tool call counts per turn
+        tool_calls_by_turn = list(tool_calls_by_response.values())
+
+        # Compute average tool calls per turn
+        num_tool_calls_per_turn = num_tool_calls / num_turns if num_turns > 0 else 0.0
+
+        return {
+            "num_turns": num_turns,
+            "num_tool_calls": num_tool_calls,
+            "num_tool_calls_per_turn": num_tool_calls_per_turn,
+            "tool_calls_by_turn": tool_calls_by_turn,
+        }
+
+    def _aggregate_trajectory_metrics(
+        self, trajectory_metrics_list: List[Dict[str, Any]]
+    ) -> Dict[str, Any]:
+        """
+        Aggregate trajectory metrics across a batch.
+
+        Args:
+            trajectory_metrics_list: List of trajectory metrics dictionaries
+
+        Returns:
+            Dictionary with aggregated batch-level metrics:
+                - trajectory/avg_num_turns: Average number of turns per trajectory
+                - trajectory/avg_num_tool_calls: Average number of tool calls per trajectory
+                - trajectory/avg_tool_calls_per_turn: Average tool calls per turn across all trajectories
+        """
+        if not trajectory_metrics_list:
+            return {}
+
+        # Extract metrics from each trajectory
+        num_turns_list = [m.get("num_turns", 0) for m in trajectory_metrics_list]
+        num_tool_calls_list = [m.get("num_tool_calls", 0) for m in trajectory_metrics_list]
+        num_tool_calls_per_turn_list = [
+            m.get("num_tool_calls_per_turn", 0.0) for m in trajectory_metrics_list
+        ]
+
+        # Compute batch-level averages
+        return {
+            "trajectory/avg_num_turns": float(np.mean(num_turns_list)) if num_turns_list else 0.0,
+            "trajectory/avg_num_tool_calls": float(np.mean(num_tool_calls_list))
+            if num_tool_calls_list
+            else 0.0,
+            "trajectory/avg_tool_calls_per_turn": float(np.mean(num_tool_calls_per_turn_list))
+            if num_tool_calls_per_turn_list
+            else 0.0,
+        }
 
     async def code_search_loop(
         self,
@@ -195,13 +257,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         sampling_params: Dict[str, Any],
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
-    ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]]:
+    ) -> Tuple[
+        List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]
+    ]:
         # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
         # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
         instance = env_extras
         error = None
         try:
-
             messages, final_message, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
@@ -224,7 +287,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
-                "end_timestamp": None
+                "end_timestamp": None,
             }
 
         # print("=" * 100)
@@ -246,10 +309,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
             reward_fn = get_reward_function(reward_fn_args["fn"])
 
-            input_args = {
-                **input_args, 
-                **reward_fn_args.get("args", {})
-                }
+            input_args = {**input_args, **reward_fn_args.get("args", {})}
 
             try:
                 reward_outputs = reward_fn(**input_args)
@@ -259,7 +319,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     reward_value = reward_outputs
                     reward_items = {reward_fn_args["fn"]: reward_value}
             except Exception as e:
-                logger.error(f"Error in computing reward {reward_fn_args['fn']}: {e}", exc_info=True)
+                logger.error(
+                    f"Error in computing reward {reward_fn_args['fn']}: {e}", exc_info=True
+                )
                 reward_value = 0.0
                 reward_items = {reward_fn_args["fn"]: reward_value}
 
@@ -280,10 +342,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         trajectory_metrics = compute_trajectory_metrics(messages)
 
-        metrics_dict = {
-            **efficiency_metrics,
-            **trajectory_metrics
-        }
+        metrics_dict = {**efficiency_metrics, **trajectory_metrics}
 
         print(f"Trajectory metrics: {metrics_dict}")
 
@@ -300,17 +359,17 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             for idx, message in enumerate(token_messages):
                 current_prompt_ids = message["prompt_token_ids"]
                 current_response_ids = message["response_token_ids"]
-                step_reward = reward * gamma**(num_steps - idx - 1)
+                step_reward = reward * gamma ** (num_steps - idx - 1)
 
                 rollout_list.append(
                     (
                         current_response_ids,
                         step_reward,
                         "complete",
-                        [1]*len(current_response_ids),
+                        [1] * len(current_response_ids),
                         current_prompt_ids,
                         None,
-                        trajectory_metrics
+                        trajectory_metrics,
                     )
                 )
 
@@ -321,9 +380,16 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             initial_input_ids = [151643]
             trajectory_metrics = {}  # Empty metrics for error case
             rollout_list.append(
-                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
+                (
+                    response_ids,
+                    reward,
+                    stop_reason,
+                    loss_mask,
+                    initial_input_ids,
+                    None,
+                    trajectory_metrics,
+                )
             )
-
 
         #     stop_reason = "complete"
         #     prompt_ids_list = []
@@ -364,11 +430,19 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         #         # print("past_response_observation_len:", past_response_observation_len)
         #         loss_mask.extend([0] * past_response_observation_len)
         #         loss_mask.extend([1] * current_response_len)
-            
+
         #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
         #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
 
-        path = Path(self.generator_cfg.traj_dir) / f"step_{batch_metadata.global_step}" / batch_metadata.training_phase
+        # Return trajectory metrics along with the rollout
+        if len(rollout_list) > 0:
+            rollout_list[0] = rollout_list[0][:6] + (trajectory_metrics,)
+
+        path = (
+            Path(self.generator_cfg.traj_dir)
+            / f"step_{batch_metadata.global_step}"
+            / batch_metadata.training_phase
+        )
         path.mkdir(parents=True, exist_ok=True)
         instance_id = env_extras["instance_id"]
 
@@ -392,7 +466,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
             print(f"Saving trajectory to {filename_path}")
             with open(filename_path, "w") as f:
-                json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
+                json.dump(result_dict, f, indent=2)  # , sort_keys=True, ensure_ascii=False)
 
         # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
         return [rollout_list[-1], reward_dict, metrics_dict]
@@ -420,15 +494,15 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         task_rollouts = []
         for i in range(len(prompts)):
             rollout = self.code_search_loop(
-                    prompts[i],
-                    env_extras[i],
-                    max_tokens=max_tokens,
-                    max_input_length=max_input_length,
-                    sampling_params=sampling_params,
-                    trajectory_id=trajectory_ids[i],
-                    batch_metadata=batch_metadata,
-                )
-            
+                prompts[i],
+                env_extras[i],
+                max_tokens=max_tokens,
+                max_input_length=max_input_length,
+                sampling_params=sampling_params,
+                trajectory_id=trajectory_ids[i],
+                batch_metadata=batch_metadata,
+            )
+
             task_rollouts.append(rollout)
 
         collected_task_rollouts = await asyncio.gather(*task_rollouts)
@@ -442,8 +516,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         rewards = [output[1] for output in all_outputs if output[0] is not None]
         stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
         loss_masks = [output[3] for output in all_outputs if output[0] is not None]
-        prompt_token_ids = [
-            output[4] for output in all_outputs if output[0] is not None
+        prompt_token_ids = [output[4] for output in all_outputs if output[0] is not None]
+        trajectory_metrics_list = [
+            output[6] if len(output) > 6 else {} for output in all_outputs if output[0] is not None
         ]
         if not len(responses):
             raise ValueError(
@@ -451,12 +526,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             )
         rollout_metrics = get_rollout_metrics(responses, rewards)
 
+        # Aggregate trajectory metrics across the batch
+        batch_trajectory_metrics = self._aggregate_trajectory_metrics(trajectory_metrics_list)
+        rollout_metrics.update(batch_trajectory_metrics)
+
         tracked_metrics = {}
 
         # Aggregate Rewards and Metrics
-        for tracker_name, tracker_dict in zip(
-            ["reward", "metrics"], [rewards_dict, metrics_dict]
-        ):
+        for tracker_name, tracker_dict in zip(["reward", "metrics"], [rewards_dict, metrics_dict]):
             for tracker_dict_item in tracker_dict:
                 for k, v in tracker_dict_item.items():
                     # Check if v is numeric
@@ -465,7 +542,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     if f"{tracker_name}/{k}" not in tracked_metrics:
                         tracked_metrics[f"{tracker_name}/{k}"] = []
                     tracked_metrics[f"{tracker_name}/{k}"].append(v)
-        
+
         # Average all tracked metrics
         for k, v in tracked_metrics.items():
             tracked_metrics[k] = sum(v) / len(v)
