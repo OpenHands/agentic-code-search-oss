@@ -6,8 +6,8 @@
 #SBATCH --gres=gpu:L40S:8
 #SBATCH --nodes=1
 #SBATCH --time=2-00:00:00
-#SBATCH --mem=750G
-#SBATCH --cpus-per-task=64
+#SBATCH --mem=700G
+#SBATCH --cpus-per-task=8
 #SBATCH --ntasks-per-node=1
 
 . .env
@@ -74,6 +74,7 @@ uv run --isolated --frozen -m src.train \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.dump_data_batch=true \
+  trainer.export_path="$CKPT_PATH/exported_model/" \
   trainer.hf_save_interval=10 \
   trainer.ckpt_interval=10 \
   trainer.max_prompt_length=4096 \
