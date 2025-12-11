@@ -1,5 +1,6 @@
 import json
 import asyncio
+from pyexpat.errors import messages
 from socket import timeout
 from typing import Dict, List, Optional, Any, Tuple, Union
 import uuid
@@ -12,6 +13,8 @@ import os
 import ast
 import time
 from datetime import datetime
+import numpy as np
+from collections import defaultdict
 
 import signal
 from contextlib import contextmanager
@@ -35,6 +38,8 @@ from openhands.sdk.conversation.response_utils import get_agent_final_response
 from openhands.workspace import DockerWorkspace
 from openhands.tools.preset.default import get_default_tools
 from openhands.tools.preset.planning import get_planning_tools
+from openhands.tools.terminal import TerminalTool
+from openhands.sdk.tool import Tool
 from openhands.sdk import (
     Agent,
     LLM,
@@ -51,6 +56,7 @@ from src.utils.instance import clone_instance
 from src.rewards import get_reward_function
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
+from src.metrics.trajectory_metrics import compute_trajectory_metrics
 
 import logging
 import signal
@@ -104,6 +110,8 @@ def init_and_run(
             }
         ),
         tools=get_planning_tools(),
+        # tools=[Tool(name=TerminalTool.name)],
+        # tools=get_default_tools(enable_browser=False),
         security_analyzer=None,
     )
 
@@ -187,7 +195,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         sampling_params: Dict[str, Any],
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
-    ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]]]:
+    ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]]:
         # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
         # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
         instance = env_extras
@@ -213,9 +221,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
-            wall_clock_duration = 0.0
-            start_timestamp = None
-            end_timestamp = None
+            additional_attr = {
+                "wall_clock_duration": 0.0,
+                "start_timestamp": None,
+                "end_timestamp": None
+            }
 
         # print("=" * 100)
         # print("Conversation finished. Got the following LLM messages:")
@@ -263,26 +273,20 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
         # Compute Trajectory Metrics
-        metrics_dict = {}
-        if messages != []:
-            efficiency_metrics = compute_all_efficiency_metrics(
-                messages=messages,
-                **additional_attr,
-            )
-        else:
-            efficiency_metrics = {
-                "tokens": 0,
-                "steps": 0,
-                "avg_tool_calls_per_step": 0.0,
-                "wall_clock_duration": additional_attr["wall_clock_duration"],
-            }
+        efficiency_metrics = compute_all_efficiency_metrics(
+            messages=messages,
+            **additional_attr,
+        )
 
-        print(f"Efficiency metrics: {efficiency_metrics}")
+        trajectory_metrics = compute_trajectory_metrics(messages)
 
         metrics_dict = {
             **metrics_dict,
             **efficiency_metrics,
+            **trajectory_metrics
         }
+
+        print(f"Trajectory metrics: {metrics_dict}")
 
         #     # print("=" * 100)
         #     # print("Conversation finished. Got the following LLM messages:")
@@ -306,7 +310,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         "complete",
                         [1]*len(current_response_ids),
                         current_prompt_ids,
-                        None
+                        None,
+                        trajectory_metrics
                     )
                 )
 
@@ -315,8 +320,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             stop_reason = "error"
             loss_mask = [1]
             initial_input_ids = [151643]
+            trajectory_metrics = {}  # Empty metrics for error case
             rollout_list.append(
-                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
+                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
             )
 
 
@@ -447,19 +453,19 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         rollout_metrics = get_rollout_metrics(responses, rewards)
 
         tracked_metrics = {}
-        # Aggregate Rewards
-        for reward_dict_item in rewards_dict:
-            for k, v in reward_dict_item.items():
-                if f"reward/{k}" not in tracked_metrics:
-                    tracked_metrics[f"reward/{k}"] = []
-                tracked_metrics[f"reward/{k}"].append(v)
 
-        # Aggregate Trajectory Metrics
-        for metrics_dict_item in metrics_dict:
-            for k, v in metrics_dict_item.items():
-                if f"metrics/{k}" not in tracked_metrics:
-                    tracked_metrics[f"metrics/{k}"] = []
-                tracked_metrics[f"metrics/{k}"].append(v)
+        # Aggregate Rewards and Metrics
+        for tracker_name, tracker_dict in zip(
+            ["reward", "metrics"], [rewards_dict, metrics_dict]
+        ):
+            for tracker_dict_item in tracker_dict:
+                for k, v in tracker_dict_item.items():
+                    # Check if v is numeric
+                    if not isinstance(v, (int, float)):
+                        continue
+                    if f"{tracker_name}/{k}" not in tracked_metrics:
+                        tracked_metrics[f"{tracker_name}/{k}"] = []
+                    tracked_metrics[f"{tracker_name}/{k}"].append(v)
         
         # Average all tracked metrics
         for k, v in tracked_metrics.items():

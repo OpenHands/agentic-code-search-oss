@@ -3,7 +3,7 @@
 #SBATCH --output=../logs/%j.out
 #SBATCH --error=../logs/%j.out
 #SBATCH --partition=general
-#SBATCH --gres=gpu:L40S:8
+#SBATCH --gres=gpu:A100:2
 #SBATCH --nodes=1
 #SBATCH --time=2-00:00:00
 #SBATCH --mem=512G
@@ -36,7 +36,7 @@ CKPT_PATH="${CKPT_PATH:-ckpts/${MODEL_ALIAS}}"
 mkdir -p $CKPT_PATH
 
 NNODES=1
-NUM_INFERENCE_ENGINES=4
+NUM_INFERENCE_ENGINES=2
 TP_SIZE=1
 LOGGER=wandb
 
