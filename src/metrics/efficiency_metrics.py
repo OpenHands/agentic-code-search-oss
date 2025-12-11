@@ -138,22 +138,22 @@ def compute_all_efficiency_metrics(
         "wall_clock_duration": wall_clock_duration,
 
         # Extended metrics for richer analysis
-        "token_breakdown": {
-            "total_prompt_tokens": token_metrics["total_prompt_tokens"],
-            "total_response_tokens": token_metrics["total_response_tokens"],
-            "avg_prompt_tokens_per_step": token_metrics["avg_prompt_tokens_per_step"],
-            "avg_response_tokens_per_step": token_metrics["avg_response_tokens_per_step"],
-        },
-        "tool_breakdown": {
-            "total_tool_calls": tool_metrics["total_tool_calls"],
-            "by_tool_type": tool_metrics["tool_call_breakdown"],
-        },
+        # "token_breakdown": {
+        "total_prompt_tokens": token_metrics["total_prompt_tokens"],
+        "total_response_tokens": token_metrics["total_response_tokens"],
+        "avg_prompt_tokens_per_step": token_metrics["avg_prompt_tokens_per_step"],
+        "avg_response_tokens_per_step": token_metrics["avg_response_tokens_per_step"],
+        # },
+        # "tool_breakdown": {
+        #     "total_tool_calls": tool_metrics["total_tool_calls"],
+        #     "by_tool_type": tool_metrics["tool_call_breakdown"],
+        # },
     }
 
-    # Add timestamps if provided
-    if start_timestamp:
-        efficiency_metrics["start_timestamp"] = start_timestamp
-    if end_timestamp:
-        efficiency_metrics["end_timestamp"] = end_timestamp
+    # # Add timestamps if provided
+    # if start_timestamp:
+    #     efficiency_metrics["start_timestamp"] = start_timestamp
+    # if end_timestamp:
+    #     efficiency_metrics["end_timestamp"] = end_timestamp
 
     return efficiency_metrics
