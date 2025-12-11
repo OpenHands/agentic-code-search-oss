@@ -10,6 +10,8 @@ import requests
 from pathlib import Path
 import os
 import ast
+import time
+from datetime import datetime
 
 import signal
 from contextlib import contextmanager
@@ -45,7 +47,10 @@ from openhands.sdk import (
 
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
+
 from src.rewards import get_reward_function
+
+from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 
 import logging
 import signal
@@ -114,6 +119,11 @@ def init_and_run(
     conversation.send_message(input_message)
 
     logger.info("Conversation Starting")
+
+    # Capture start time
+    start_time = time.time()
+    start_timestamp = datetime.now().isoformat()
+
     conversation.run()
 
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
@@ -122,7 +132,18 @@ def init_and_run(
     conversation.close()
     logger.info("Conversation Finished")
 
-    return messages, final_message
+    # Capture end time
+    end_time = time.time()
+    end_timestamp = datetime.now().isoformat()
+    wall_clock_duration = end_time - start_time
+
+    additional_attr = {
+        "wall_clock_duration": wall_clock_duration,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp
+    }
+
+    return messages, final_message, additional_attr
 
 
 class CodeSearchGenerator(SkyRLGymGenerator):
@@ -173,7 +194,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         error = None
         try:
 
-            messages, final_message = await init_and_run.remote(
+            messages, final_message, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
                 # sweagent_config,
@@ -192,6 +213,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
+            wall_clock_duration = 0.0
+            start_timestamp = None
+            end_timestamp = None
 
         # print("=" * 100)
         # print("Conversation finished. Got the following LLM messages:")
@@ -237,6 +261,27 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             }
 
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
+
+        # Compute efficiency metrics
+        if messages != []:
+            efficiency_metrics = compute_all_efficiency_metrics(
+                messages=messages,
+                **additional_attr,
+            )
+        else:
+            efficiency_metrics = {
+                "tokens": 0,
+                "steps": 0,
+                "avg_tool_calls_per_step": 0.0,
+                "wall_clock_duration": additional_attr["wall_clock_duration"],
+            }
+
+        print(f"Efficiency metrics: {efficiency_metrics}")
+
+        #     # print("=" * 100)
+        #     # print("Conversation finished. Got the following LLM messages:")
+        #     # for i, message in enumerate(messages):
+        #     #     print(f"Message {i}: {str(message)[:200]}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
@@ -331,6 +376,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 "reward_dict": reward_dict,
                 "final_message": final_message,
                 "messages": messages,
+                "efficiency_metrics": efficiency_metrics,
             }
 
             print(f"Saving trajectory to {filename_path}")
