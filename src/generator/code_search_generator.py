@@ -9,7 +9,6 @@ from pathlib import Path
 import os
 import time
 from datetime import datetime
-import numpy as np
 
 
 from skyrl_train.generators.skyrl_gym_generator import (
@@ -168,42 +167,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError("OpenhandsGenerator doesn't support custom chat template")
-
-    def _aggregate_trajectory_metrics(
-        self, trajectory_metrics_list: List[Dict[str, Any]]
-    ) -> Dict[str, Any]:
-        """
-        Aggregate trajectory metrics across a batch.
-
-        Args:
-            trajectory_metrics_list: List of trajectory metrics dictionaries
-
-        Returns:
-            Dictionary with aggregated batch-level metrics:
-                - trajectory/avg_num_turns: Average number of turns per trajectory
-                - trajectory/avg_num_tool_calls: Average number of tool calls per trajectory
-                - trajectory/avg_tool_calls_per_turn: Average tool calls per turn across all trajectories
-        """
-        if not trajectory_metrics_list:
-            return {}
-
-        # Extract metrics from each trajectory
-        num_turns_list = [m.get("num_turns", 0) for m in trajectory_metrics_list]
-        num_tool_calls_list = [m.get("num_tool_calls", 0) for m in trajectory_metrics_list]
-        num_tool_calls_per_turn_list = [
-            m.get("num_tool_calls_per_turn", 0.0) for m in trajectory_metrics_list
-        ]
-
-        # Compute batch-level averages
-        return {
-            "trajectory/avg_num_turns": float(np.mean(num_turns_list)) if num_turns_list else 0.0,
-            "trajectory/avg_num_tool_calls": float(np.mean(num_tool_calls_list))
-            if num_tool_calls_list
-            else 0.0,
-            "trajectory/avg_tool_calls_per_turn": float(np.mean(num_tool_calls_per_turn_list))
-            if num_tool_calls_per_turn_list
-            else 0.0,
-        }
 
     async def code_search_loop(
         self,
@@ -474,18 +437,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
         loss_masks = [output[3] for output in all_outputs if output[0] is not None]
         prompt_token_ids = [output[4] for output in all_outputs if output[0] is not None]
-        trajectory_metrics_list = [
-            output[6] if len(output) > 6 else {} for output in all_outputs if output[0] is not None
-        ]
         if not len(responses):
             raise ValueError(
                 "Found no valid responses for this step. This means that generation failed for all trajectories, likely due to errors in environment setup."
             )
         rollout_metrics = get_rollout_metrics(responses, rewards)
-
-        # Aggregate trajectory metrics across the batch
-        batch_trajectory_metrics = self._aggregate_trajectory_metrics(trajectory_metrics_list)
-        rollout_metrics.update(batch_trajectory_metrics)
 
         tracked_metrics = {}
 
