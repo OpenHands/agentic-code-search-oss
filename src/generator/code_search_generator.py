@@ -217,12 +217,17 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 **reward_fn_args.get("args", {})
                 }
 
-            reward_outputs = reward_fn(**input_args)
-            if isinstance(reward_outputs, tuple):
-                reward_value, reward_items = reward_outputs
-            else:
-                reward_value = reward_outputs
-                reward_items = {reward: reward_value}
+            try:
+                reward_outputs = reward_fn(**input_args)
+                if isinstance(reward_outputs, tuple):
+                    reward_value, reward_items = reward_outputs
+                else:
+                    reward_value = reward_outputs
+                    reward_items = {reward_fn_args["fn"]: reward_value}
+            except Exception as e:
+                logger.error(f"Error in computing reward {reward_fn_args['fn']}: {e}", exc_info=True)
+                reward_value = 0.0
+                reward_items = {reward_fn_args["fn"]: reward_value}
 
             reward += reward_value
 
@@ -392,14 +397,13 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         reward_metrics = {}
         for reward_dict_item in reward_dict:
             for k, v in reward_dict_item.items():
-                if f"environment/{k}" not in reward_metrics:
-                    reward_metrics[f"environment/{k}"] = []
-                reward_metrics[f"environment/{k}"].append(v)
+                if f"reward/{k}" not in reward_metrics:
+                    reward_metrics[f"reward/{k}"] = []
+                reward_metrics[f"reward/{k}"].append(v)
 
         # Average the reward metrics over the batch
         for k, v in reward_metrics.items():
             reward_metrics[k] = sum(v) / len(v)
-        rollout_metrics = {**rollout_metrics, **reward_metrics}
 
         generator_output: GeneratorOutput = {
             "prompt_token_ids": prompt_token_ids,
@@ -409,7 +413,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
             "rollout_logprobs": None,
+            **reward_metrics,
         }
-        # print("full rollout_metrics", generator_output["rollout_metrics"])
 
         return generator_output

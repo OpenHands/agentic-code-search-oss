@@ -1,14 +1,14 @@
 import hydra
-from omegaconf import DictConfig, OmegaConf
+from omegaconf import DictConfig, OmegaConf, open_dict
 from skyrl_train.entrypoints.main_base import BasePPOExp, config_dir, validate_cfg
-from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
 from skyrl_train.utils import initialize_ray
 import ray
 
 import asyncio
 
 from src.generator.code_search_generator import CodeSearchGenerator
-from src.async_trainer import AsyncRayPPOTrainer
+from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
+# from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
 
 
 class CodeSearchPPOExp(BasePPOExp):
@@ -75,10 +75,11 @@ def main(cfg: DictConfig) -> None:
             reward_cfg = OmegaConf.load(f)
         cfg.generator.reward = reward_cfg.reward
     else:
-        cfg.generator.reward = [
-            {"fn": "multiturn_reward"},
-            {"fn": "file_localization_f1_reward"},
-        ]
+        with open_dict(cfg):
+            cfg.generator.reward = [
+                {"fn": "multiturn_reward"},
+                {"fn": "file_localization_f1_reward"},
+            ]
 
     initialize_ray(cfg)
     ray.get(skyrl_entrypoint.remote(cfg))

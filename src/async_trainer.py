@@ -1,198 +1,120 @@
-import asyncio
-import traceback
-import sys
+import numpy as np
+
 from loguru import logger
-from skyrl_train.trainer import RayPPOTrainer
-from tqdm import tqdm
-from skyrl_train.utils import Timer
-from skyrl_train.utils.ppo_utils import normalize_advantages_dict
-from skyrl_train.training_batch import TrainingInputBatch
+from typing import List
+
+from skyrl_train.generators.utils import get_rollout_metrics
 from skyrl_train.generators.base import GeneratorOutput
-from skyrl_train.utils.trainer_utils import ResumeMode
-from skyrl_train.generators.utils import prepare_generator_input
-from skyrl_train.inference_engines.utils import get_sampling_params_for_backend
+from skyrl_train.training_batch import TrainingInputBatch
+from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer, GeneratedOutputGroup
 
 
-class AsyncRayPPOTrainer(RayPPOTrainer):
+def patched_concatenate_generator_outputs(generator_outputs: List[GeneratorOutput]) -> GeneratorOutput:
+    """
+    Concatenate the generator outputs of multiple batches.
 
-    async def train(self):
-        """
-        Main training loop for PPO
-        """
-        assert not self.colocate_all, "colocate_all is not supported for async training"
+    We only aggregate rollout metrics the can deduced by responses and rewards, but not
+    those that use `env_metrics` or `env_classes`.
+    """
+    assert len(generator_outputs) > 0
+    has_rollout_logprobs = [output.get("rollout_logprobs") is not None for output in generator_outputs]
+    if any(has_rollout_logprobs) and not all(has_rollout_logprobs):
+        raise ValueError(
+            "generator outputs are expected to all have null rollout_logprobs or all non-null, but received a mix"
+        )
+    result: GeneratorOutput = {
+        "prompt_token_ids": sum([output["prompt_token_ids"] for output in generator_outputs], []),
+        "response_ids": sum([output["response_ids"] for output in generator_outputs], []),
+        "rewards": sum([output["rewards"] for output in generator_outputs], []),
+        "loss_masks": sum([output["loss_masks"] for output in generator_outputs], []),
+        "stop_reasons": (
+            sum([output["stop_reasons"] for output in generator_outputs], [])
+            if "stop_reasons" in generator_outputs[0] and generator_outputs[0]["stop_reasons"] is not None
+            else None
+        ),
+        "rollout_logprobs": (
+            sum([output["rollout_logprobs"] for output in generator_outputs], [])
+            if generator_outputs[0]["rollout_logprobs"] is not None
+            else None
+        ),
+    }
 
-        # Load checkpoint state if resumption is enabled
-        if self.resume_mode != ResumeMode.NONE:
-            with Timer("load_checkpoints"):
-                self.global_step = self.load_checkpoints()
-                logger.info(f"Resumed training from global_step {self.global_step}")
-        # Initialize weight sync state
-        with Timer("init_weight_sync_state"):
-            self.init_weight_sync_state()
+    # propagate additional keys with list values as-is
+    additional_keys = [
+        key for key in generator_outputs[0] if key not in result and isinstance(generator_outputs[0][key], (int, float))
+    ]
+    additional_result = {}
+    if len(additional_keys):
+        logger.info(f"Attempting to concatenate values for additional keys {additional_keys}")
+    for key in additional_keys:
+        try:
+            # result[key] = sum([generator_output[key] for generator_output in generator_outputs], [])
+            additional_result[key] = np.mean([generator_output[key] for generator_output in generator_outputs]).item()
+        except Exception as e:
+            logger.error(f"Error in aggregating key {key}: {e}", exc_info=True)
 
-        # sync weights to inference engines
-        with Timer("sync_weights_to_inference_engines"):
-            await self.async_sync_policy_weights_to_inference_engines()
+    # Re-aggregate rollout metrics
+    rollout_metrics = get_rollout_metrics(result["response_ids"], result["rewards"])
+    result["rollout_metrics"] = {**rollout_metrics, **additional_result}
 
-        # Eval before training
-        if self.cfg.trainer.eval_interval > 0 and self.cfg.trainer.eval_before_train:
-            with Timer("eval", self.all_timings):
-                eval_metrics = await self.eval()
-                self.tracker.log(eval_metrics, step=self.global_step)
+    # Validate the generator output using the number of prompts
+    # Import here to avoid circular dependency.
+    from skyrl_train.utils.trainer_utils import validate_generator_output
 
-        # main training loop
-        pbar = tqdm(total=self.total_training_steps, initial=self.global_step, desc="Training Step Progress")
-        start_epoch = self.global_step // len(self.train_dataloader)
-        # Start from step 1
-        self.global_step += 1
-        for epoch in range(start_epoch, self.cfg.trainer.epochs):
-            # while this is just off by one, you can image a more general queue based approach
-            # where the generation buffer holds a list of objects that the trainer can read from
-            # bit by bit.
-            generation_buffer = asyncio.Queue(maxsize=1)
-            self.sync_finished = asyncio.Event()
-            self.generation_ack = asyncio.Event()
+    num_prompts = len(result["prompt_token_ids"])
+    validate_generator_output(num_prompts, result)
 
-            # start generator task
-            generator_task = asyncio.create_task(self._run_generate_loop(generation_buffer))
+    return result
 
-            for idx in range(len(self.train_dataloader)):
-                with Timer("step", self.all_timings):
-                    status = await self._run_training(generation_buffer)
+class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
 
-                    # request the generation loop that we should sync sometime soon.
-                    if idx != len(self.train_dataloader) - 1:
-                        await self.generation_ack.wait()
+    def convert_generation_group_mini_batch_to_training_input(
+        self, cur_generation_group_mini_batch: List[GeneratedOutputGroup]
+    ) -> TrainingInputBatch:
+        """Given a mini-batch of generated groups, concatenate them into a single GeneratorOutput, then convert to a TrainingInputBatch."""
+        generator_outputs = []
+        uids = []
+        stalenesses = []
+        staleness_violation_count = 0
+        group_size = len(cur_generation_group_mini_batch[0].generator_output["response_ids"])
+        for cur_generated_output_group in cur_generation_group_mini_batch:
+            cur_staleness = self.global_step - cur_generated_output_group.global_step_when_scheduled
+            stalenesses.append(cur_staleness)
+            generator_outputs.append(cur_generated_output_group.generator_output)
+            uids.extend([cur_generated_output_group.uid] * group_size)
 
-                    # sync weights
-                    async with Timer("sync_weights", self.all_timings):
-                        await self.async_sync_policy_weights_to_inference_engines()
+            # Check staleness violation.
+            if cur_staleness > self.max_staleness_steps:
+                # TODO(Charlie): should we drop, drop and resample, or just log?
+                logger.warning(
+                    "Staleness control violated despite using AsyncStalenessManager: "
+                    f"cur_staleness={cur_staleness}, max_staleness_steps={self.max_staleness_steps}.\n"
+                    "If this happens too often, consider increasing max_staleness_steps, adjusting "
+                    "trainer.fully_async.num_parallel_generation_workers, or adjusting generation-training GPU allocation.\n"
+                    "See https://skyrl.readthedocs.io/en/latest/tutorials/fully_async.html#async-staleness-manager for more details."
+                )
+                staleness_violation_count += 1
 
-                    self.sync_finished.set()
-                    self.generation_ack.clear()
+        generator_output = patched_concatenate_generator_outputs(generator_outputs)
+        assert generator_output["rollout_metrics"] is not None, "Rollout metrics should be non-null."
+        self.all_metrics.update(generator_output["rollout_metrics"])
 
-                # 5. set logs
-                logger.info(status)
-                # log epoch info
-                self.all_metrics.update({"trainer/epoch": epoch, "trainer/global_step": self.global_step})
-                self.tracker.log(self.all_metrics, step=self.global_step)
-                self.all_metrics = {}
-                pbar.update(1)
+        # Log staleness statistics for this step
+        self.all_metrics.update(
+            {
+                "async/staleness_mean": sum(stalenesses) / len(stalenesses),
+                "async/staleness_max": max(stalenesses),
+                "async/staleness_min": min(stalenesses),
+                "async/staleness_ratio": sum(1 for s in stalenesses if s > 0) / len(stalenesses),
+                "async/staleness_violation_count": staleness_violation_count,
+            }
+        )
 
-                if self.cfg.trainer.eval_interval > 0 and (
-                    self.global_step % self.cfg.trainer.eval_interval == 0
-                    or self.global_step == self.total_training_steps
-                ):
-                    with Timer("eval", self.all_timings):
-                        eval_metrics = await self.eval()
-                        self.all_metrics.update(eval_metrics)
-                if self.cfg.trainer.ckpt_interval > 0 and self.global_step % self.cfg.trainer.ckpt_interval == 0:
-                    with Timer("save_checkpoints", self.all_timings):
-                        self.save_checkpoints()
-                if self.cfg.trainer.hf_save_interval > 0 and self.global_step % self.cfg.trainer.hf_save_interval == 0:
-                    with Timer("save_hf_model", self.all_timings):
-                        self.save_models()
-                self.tracker.log({"timing/" + k: v for k, v in self.all_timings.items()}, step=self.global_step)
-                self.all_timings = {}
-                self.global_step += 1
-
-            if self.cfg.trainer.update_ref_every_epoch and self.ref_model is not None:
-                with Timer("update_ref_with_policy", self.all_timings):
-                    await asyncio.to_thread(self.update_ref_with_policy)
-
-            # cancel generation task for this epoch
-            generator_task.cancel()
-
-        pbar.close()
-        if self.cfg.trainer.ckpt_interval > 0:
-            with Timer("save_checkpoints", self.all_timings):
-                self.save_checkpoints()
-                logger.info("Saved final checkpoint.")
-        if self.cfg.trainer.hf_save_interval > 0:
-            with Timer("save_hf_model", self.all_timings):
-                self.save_models()
-                logger.info("Saved final model.")
-        logger.info("Training done!")
-
-    async def _run_training(self, generation_buffer):
-        # Get a generation future and await on the object
-        generator_output, uids = await generation_buffer.get()  # GeneratorOutput, List[str]
+        # Convert rewards to per-token form and compute reward metrics before training conversion
+        generator_output = self.postprocess_generator_output(generator_output, uids)
 
         # print example just for debugging
         vis = self.tokenizer.decode(generator_output["response_ids"][0])
-        print("example: ", vis)
+        logger.info(f"Example generated: {vis}")
 
-        with Timer("convert_to_training_input", self.all_timings):
-            training_input: TrainingInputBatch = self.convert_to_training_input(generator_output, uids)
-
-        # inference and calculate values, log probs, rewards, kl divergence
-        with Timer("fwd_logprobs_values_reward", self.all_timings):
-            training_input = await asyncio.to_thread(self.fwd_logprobs_values_reward, training_input)
-
-        # calculate kl divergence and create experiences
-        if self.cfg.trainer.algorithm.use_kl_in_reward:
-            with Timer("apply_reward_kl_penalty", self.all_timings):
-                training_input = self.apply_reward_kl_penalty(training_input)
-
-        # calculate advantages and returns / along with tensorboard logging
-        with Timer("compute_advantages_and_returns", self.all_timings):
-            training_input = self.compute_advantages_and_returns(training_input)
-            # remove some unwanted keys
-            for key in ["rewards"]:
-                training_input.pop(key)
-            training_input.metadata.pop("uids")
-
-            if self.cfg.trainer.algorithm.advantage_batch_normalize:
-                training_input = normalize_advantages_dict(training_input)
-
-        if self.cfg.trainer.dump_data_batch:
-            # dump data to file
-            with Timer("dump_data_batch"):
-                self.dump_data(training_input, file_name=f"global_step_{self.global_step}_training_input")
-
-        # train policy/critic model
-        with Timer("train_critic_and_policy", self.all_timings):
-            status = await asyncio.to_thread(self.train_critic_and_policy, training_input)
-
-        return status
-
-    async def _run_generate_loop(self, generation_buffer: asyncio.Queue):
-        try:
-            for i, rand_prompts in enumerate(self.train_dataloader):
-                # truncate data to have even shards
-                rand_prompts = self._remove_tail_data(rand_prompts)
-                generator_input, uids = prepare_generator_input(
-                    rand_prompts,
-                    self.cfg.generator.n_samples_per_prompt,
-                    get_sampling_params_for_backend(self.cfg.generator.backend, self.cfg.generator.sampling_params),
-                    self.cfg.environment.env_class,
-                    "train",
-                    self.global_step,
-                )
-
-                # generation phase
-                async with Timer("generate", self.all_timings):
-                    generator_output: GeneratorOutput = await self.generate(generator_input)
-                    generator_output = self.postprocess_generator_output(generator_output, uids)
-
-                # Add to generation buffer
-                await generation_buffer.put((generator_output, uids))
-
-                # If the buffer is full, start weight sync
-                # Don't weight sync in the first step, because we let the generator run one step ahead
-                if generation_buffer.full() and i != 0:
-                    # Signal that generation is done, ready for weight sync
-                    self.generation_ack.set()
-                    await self.sync_finished.wait()
-                    # Clear the sync request for next sync
-                    self.sync_finished.clear()
-        # We have an explicit try-catch here because asyncio doesn't propagate exceptions to the main thread.
-        except Exception as e:
-            logger.error(f"Generator errored out with exception: {e}")
-            logger.error(f"Traceback: \n{traceback.format_exc()}")
-            sys.exit(1)
-
-    async def async_sync_policy_weights_to_inference_engines(self):
-        return await self.policy_model.async_run_method(
-            "pass_through", "broadcast_to_inference_engines", self.inference_engine_client
-        )
+        return self.convert_to_training_input(generator_output, uids)

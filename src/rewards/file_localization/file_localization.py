@@ -21,7 +21,15 @@ def compute_file_f1_score(predicted_files, true_files):
 #     return compute_file_f1_score(predicted_files, true_files)
 
 @reward("file_localization_f1_reward")
-def file_localization_f1_reward(final_message: str, instance: dict, **kwargs) -> float:
+def file_localization_f1_reward(
+    final_message: str,
+    instance: dict,
+    file_level_weight: float=1.0,
+    **kwargs
+    ):
     all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(final_message)
     true_files = set(x[0] for x in ast.literal_eval(instance["target"]))
-    reward_file = compute_file_f1_score(all_found_files, true_files)
+    file_level_score = compute_file_f1_score(all_found_files, true_files)
+    weighted_file_score = file_level_weight * file_level_score
+
+    return weighted_file_score, {"file_level_score": file_level_score}

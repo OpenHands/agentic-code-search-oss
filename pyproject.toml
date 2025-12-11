@@ -17,11 +17,19 @@ dependencies = [
     "openhands-workspace",
     "vllm==0.11.0",
     "verifiers>=0.1.6.post0",
+    "datasets>=4.0.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["swe_grep_oss_env"]
 
 [tool.setuptools.packages.find]
 where = ["."]

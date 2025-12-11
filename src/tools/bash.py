@@ -41,7 +41,7 @@ def bash(command: str, cwd: Optional[str] = None) -> str:
             shell=True,
             capture_output=True,
             text=True,
-            timeout=30,  # 30 second timeout
+            timeout=60,  # 30 second timeout
             cwd=cwd,  # Set working directory
         )
 
@@ -53,6 +53,11 @@ def bash(command: str, cwd: Optional[str] = None) -> str:
             # Command succeeded
             if not output:
                 return "Command executed successfully (no output)."
+
+            # Truncate to 200 lines and append message with remaining lines and total lines if more than 200
+            if len(output) > 200:
+                return f"Output truncated to 200 lines. Total lines: {len(output.splitlines())}\n\nOutput:\n{output}"
+
             return output
         else:
             # Command failed

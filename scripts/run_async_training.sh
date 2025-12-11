@@ -6,20 +6,21 @@
 #SBATCH --gres=gpu:L40S:8
 #SBATCH --nodes=1
 #SBATCH --time=2-00:00:00
-#SBATCH --mem=750G
-#SBATCH --cpus-per-task=64
+#SBATCH --mem=700G
+#SBATCH --cpus-per-task=8
 #SBATCH --ntasks-per-node=1
-#SBATCH --exclude=babel-q5-28,babel-o5-20,babel-n5-28,babel-q5-24,babel-p5-20,babel-q5-20,babel-q5-32,babel-o9-20,babel-q9-28,babel-s9-16,babel-t5-24,babel-p5-32
 
 . .env
 
-while getopts ":m:n:d:s:o:" opt; do
+while getopts ":m:n:d:s:o:i:t:" opt; do
   case ${opt} in
     m ) MODEL=$OPTARG;;
     n ) N_ROLLOUTS=$OPTARG;;
     d ) DATA_PATH=$OPTARG;;
     s ) CKPT_PATH=$OPTARG;;
     o ) OTHER_OPTION=$OPTARG;;
+    i ) NUM_INFERENCE_ENGINES=$OPTARG;;
+    t ) NUM_TRAINING_ENGINES=$OPTARG;;
     # \? ) echo "Usage: cmd [-u] [-p]";;
   esac
 done
@@ -37,10 +38,9 @@ DATA_PATH="${DATA_PATH:-data/swe_smith}"
 CKPT_PATH="${CKPT_PATH:-ckpts/${MODEL_ALIAS}}"
 mkdir -p $CKPT_PATH
 
-NNODES=1
-NUM_INFERENCE_ENGINES=4
-TP_SIZE=1
-LOGGER=wandb
+HALF_NUM_GPUS=$((NUM_GPUS / 2))
+NUM_INFERENCE_ENGINES="${NUM_INFERENCE_ENGINES:-$HALF_NUM_GPUS}"
+NUM_TRAINING_ENGINES="${NUM_TRAINING_ENGINES:-$HALF_NUM_GPUS}"
 
 uv run --isolated --frozen -m src.train \
   +run_async_trainer=true \
@@ -55,12 +55,12 @@ uv run --isolated --frozen -m src.train \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
   trainer.fully_async.num_parallel_generation_workers=20 \
-  trainer.placement.policy_num_gpus_per_node=1 \
-  trainer.placement.ref_num_gpus_per_node=1 \
+  trainer.placement.policy_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
+  trainer.placement.ref_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
   trainer.placement.policy_num_nodes=1 \
   trainer.placement.ref_num_nodes=1 \
   trainer.policy.sequence_parallel_size=1 \
-  generator.num_inference_engines=1 \
+  generator.num_inference_engines=${NUM_INFERENCE_ENGINES} \
   generator.inference_engine_tensor_parallel_size=1 \
   +generator.traj_dir=$CKPT_PATH/trajectories/ \
   +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,reasoning_parser:qwen3}" \
@@ -74,6 +74,8 @@ uv run --isolated --frozen -m src.train \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.dump_data_batch=true \
+  trainer.export_path="$CKPT_PATH/exported_model/" \
+  trainer.hf_save_interval=10 \
   trainer.ckpt_interval=10 \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
@@ -93,9 +95,10 @@ uv run --isolated --frozen -m src.train \
   generator.n_samples_per_prompt=${N_ROLLOUTS} \
   generator.gpu_memory_utilization=0.75 \
   generator.enforce_eager=false \
-  trainer.logger="$LOGGER" \
+  trainer.logger="wandb" \
   trainer.project_name="code_search" \
   trainer.run_name=${RUN_NAME} \
   trainer.resume_mode=latest \
   trainer.ckpt_path="$CKPT_PATH" \
+  trainer.max_ckpts_to_keep=2 \
   $OTHER_OPTION
