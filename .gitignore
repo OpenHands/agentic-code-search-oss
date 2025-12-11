@@ -3,6 +3,9 @@
 
 # Custom
 swebench_repos/
+uv.lock
+agent-sdk/
+outputs/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

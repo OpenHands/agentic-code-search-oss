@@ -1,7 +1,6 @@
 import logging
 from typing import Dict, List, Tuple
 
-
 def parse_simple_output(raw_output: str) -> List[Dict[str, str]]:
     """
     Parse simplified agent output containing filename, optional class, and function.

@@ -21,11 +21,19 @@ dependencies = [
     "sentence-transformers>=3.0.0",
     "tree-sitter>=0.25.2",
     "tree-sitter-python>=0.23.0",
+    "datasets>=4.0.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
 ]
 
 [build-system]
 requires = ["setuptools>=61.0", "wheel"]
 build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["swe_grep_oss_env"]
 
 [tool.setuptools.packages.find]
 where = ["."]
@@ -33,6 +41,7 @@ include = ["src", "software-agent-sdk"]
 
 [dependency-groups]
 dev = [
+    "pytest>=9.0.2",
     "pre-commit>=4.3.0",
     "psutil>=7.0.0",
     "pyright>=1.1.405",
