@@ -10,19 +10,8 @@ You are given access to the codebase in a linux file system.
 
 ## TOOL USAGE REQUIREMENTS
 
-### semantic_search tool (RECOMMENDED for initial exploration)
-- Use semantic_search to find files based on natural language queries
-- This tool uses embeddings to find semantically relevant code
-- Especially useful for:
-  * Finding files related to specific functionality or features
-  * Locating code that implements certain behaviors
-  * Discovering relevant files when you don't know exact keywords
-- Example: `semantic_search("authentication and login functionality")`
-- Returns file paths with relevance scores - higher scores indicate better matches
-- Use this FIRST before falling back to keyword-based search
-
-### bash tool (REQUIRED for verification and detailed search)
-- You MUST use the bash tool to verify semantic search results and explore the codebase
+### bash tool (REQUIRED for search)
+- You MUST use the bash tool to search and explore the codebase
 - Execute bash commands like: rg, grep, find, ls, cat, head, tail, sed
 - Use parallel tool calls: invoke bash tool up to 5 times concurrently in a single turn
 - NEVER exceed 5 parallel tool calls per turn
@@ -58,25 +47,20 @@ You are given access to the codebase in a linux file system.
 
 ## SEARCH STRATEGY
 
-1. **Initial Exploration**: Start with semantic search, then verify
-   - Use semantic_search with a natural language description of what you're looking for
-   - Review the returned files and their relevance scores
-   - Use bash (rg, grep) to search for specific keywords, function names, class names
-   - Check file names and directory structure with find/ls
+1. **Initial Exploration**: Cast a wide net
+   - Search for keywords, function names, class names
+   - Check file names and directory structure
    - Use up to 3 parallel bash calls to explore multiple angles
    - Check file sizes with `wc -l` before reading
    - Read promising files in chunks (lines 1-100) to verify relevance
 
-2. **Deep Dive**: Combine semantic and syntactic search
-   - If semantic_search results are promising, verify them with bash tools
-   - If semantic_search missed something, use keyword-based search to fill gaps
+2. **Deep Dive**: Follow the most promising leads
    - Use up to 3 parallel bash calls to investigate further
    - Read files in chunks to confirm they address the query
    - Use `rg` with line numbers to locate specific code, then read those ranges
    - Start eliminating false positives
 
 3. **Final Verification**: Confirm your file list
-   - Cross-reference semantic_search results with bash-based findings
    - Verify each candidate file is truly relevant
    - Ensure you haven't missed related files
    - Return your answer in <files> tags
@@ -84,29 +68,20 @@ You are given access to the codebase in a linux file system.
 ## CRITICAL RULES
 - NEVER exceed 5 parallel bash tool calls in a single turn
 - NEVER respond without wrapping your file list in <files> tags
-- ALWAYS verify semantic_search results with bash tools before including them
-- USE semantic_search for high-level conceptual queries, bash for specific patterns
+- ALWAYS use bash tool to search (do not guess file locations)
 - NEVER read entire large files - always read in chunks (100-line ranges)
 - Check file size with `wc -l` before reading
 - Read file contents in chunks to verify relevance before including them
 - Return file paths as they appear in the repository. Do not begin the path with "./"
 - Aim for high precision (all files relevant) and high recall (no relevant files missed)
 
-## EXAMPLE WORKFLOW
+## EXAMPLE OUTPUT
 
-1. Start with semantic search:
-   semantic_search("user authentication and session management")
-   → Returns: src/auth/login.py (0.89), src/auth/session.py (0.85), src/middleware/auth.py (0.78)
+After exploring the codebase, return your answer like this:
 
-2. Verify with bash and read key files:
-   - wc -l src/auth/login.py
-   - sed -n '1,100p' src/auth/login.py
-   - rg "session" src/auth/ -l
-
-3. Return final answer:
 <files>
-src/auth/login.py
-src/auth/session.py
-src/middleware/auth.py
+src/main.py
+src/utils/helper.py
+tests/test_main.py
 </files>
 """
