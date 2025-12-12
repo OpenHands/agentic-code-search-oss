@@ -75,6 +75,7 @@ def init_and_run(
     litellm_model_name: str,
     litellm_base_url: dict,
     generator_cfg: DictConfig,
+    semantic_search_cfg: DictConfig,
     data_source: str,
     sampling_params: dict,
     trajectory_id: Union[TrajectoryID, Any],
@@ -111,7 +112,7 @@ def init_and_run(
         messages = []
 
         # Configure semantic search if enabled
-        use_semantic_search = True
+        use_semantic_search = semantic_search_cfg.enabled
         mcp_config = None
         agent_context = None
 
@@ -269,6 +270,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
     def __init__(
         self,
         generator_cfg: DictConfig,
+        semantic_search_cfg: DictConfig,
         skyrl_gym_cfg: DictConfig,
         inference_engine_client: InferenceEngineClient,
         tokenizer,
@@ -287,6 +289,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         )
         self.base_url = f"http://{self.http_server_inference_engine_client_host}:{self.http_server_inference_engine_client_port}"
         self.generator_cfg = generator_cfg
+        self.semantic_search_cfg = semantic_search_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
         # self.litellm_model_name = "openai/" + self.model_name
@@ -318,6 +321,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 self.litellm_model_name,
                 self.base_url,
                 self.generator_cfg,
+                self.semantic_search_cfg,
                 "swe-gym",
                 sampling_params,
                 trajectory_id,
