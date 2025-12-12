@@ -81,6 +81,7 @@ set -x
 
 # Launch training 
 CUDA_LAUNCH_BLOCKING=1 uv run --isolated -m src.train \
+  --config-name=ppo_base_config \
   data.train_data=["data/SWE-Gym__SWE-Gym_train/train.parquet"] \
   data.val_data=["data/SWE-Gym__SWE-Gym_train/validation.parquet"] \
   trainer.algorithm.advantage_estimator=grpo \
@@ -125,11 +126,15 @@ CUDA_LAUNCH_BLOCKING=1 uv run --isolated -m src.train \
   generator.gpu_memory_utilization=0.4 \
   trainer.logger=$LOGGER \
   trainer.project_name=code_search \
-  trainer.run_name=code_search_Qwen-Qwen3-4B \
+  trainer.run_name=$RUN_NAME \
   trainer.resume_mode=null \
   trainer.ckpt_path=$CKPT_PATH \
-  +generator.semantic_search=true \
-  +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,max_model_len:16384}"
+  +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,max_model_len:16384}" \
+  +semantic_search.enabled=true \
+  +semantic_search.device=cpu \
+  +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
+  +semantic_search.reranker_model="jinaai/jina-reranker-v3" \
+  +semantic_search.max_indices=50
 
 CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"
 MAX_AGE_DAYS=7
