@@ -193,7 +193,7 @@ def init_and_run(
             visualizer=None,
             workspace=str(working_dir),
         )
-        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_localization.j2")
+        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
         input_message = get_instruction(instance, prompt_path, str(working_dir))
         
         # Truncate input if too long
