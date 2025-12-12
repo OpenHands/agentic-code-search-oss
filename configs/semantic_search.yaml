@@ -5,14 +5,10 @@ semantic_search:
   device: "cuda"
   max_indices: 50
   max_cache_size_gb: null
-  skill_path: ".openhands/skills/semantic-search.md"
-  wrapper_script: "scripts/run_mcp_server_training.sh"
   
   # Prompt configuration
   prompts:
     with_semantic_search:
       system_prompt: "src/prompts/system_prompt_semantic.py"
-      task_template: "src/prompts/templates/file_localization_semantic.j2"
     without_semantic_search:
       system_prompt: "src/prompts/system_prompt_basic.py"
-      task_template: "src/prompts/templates/file_localization_basic.j2"
