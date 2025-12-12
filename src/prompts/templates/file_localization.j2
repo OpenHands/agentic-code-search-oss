@@ -8,23 +8,4 @@ Consider the following issue description:
 
 Act as a code search agent to find the relevant files where we need to make changes so that <issue_description> is met?
 NOTE: You do not need to solve the issue, all you need to do is find the relevant files. Your output will be used to guide another agent to solve the issue.
-
-INSTRUCTIONS:
-1. Use semantic_search and terminal tools to explore the codebase thoroughly to find all relevant files.
-2. Identify ALL files that need to be modified using both the semantic search and terminal tools to fix this issue.
-3. Your FINAL response, after sufficient exploration, MUST use this exact format:
-
-<file-list>['path/to/file1.py', 'path/to/file2.py', 'path/to/file3.py']</file-list>
-
-CRITICAL:
-- Use a Python list format with single quotes
-- Use relative paths from repository root (e.g., 'src/module/file.py' not './src/module/file.py')
-- Include ALL files that need changes
-- Do NOT add explanations after the file list tag
-
-Example of correct final response:
-After analyzing the codebase, the files that need modification are:
-
-<file-list>['astropy/modeling/separable.py', 'astropy/modeling/core.py', 'astropy/modeling/tests/test_separable.py']</file-list>
-
-Now find the files that need modification.
+Only use the provided tools to find and please output your answer as just a list of the relevant files that are directly related to the <issue_description> in the format <file-list>['file1', 'file2', ...]</file-list> using the message parameter of the Finish tool.
