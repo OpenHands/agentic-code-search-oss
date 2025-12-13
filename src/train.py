@@ -13,8 +13,17 @@ from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOT
 
 class CodeSearchPPOExp(BasePPOExp):
     def get_generator(self, cfg, tokenizer, inference_engine_client):
+        semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({
+            'enabled': False,
+            'embedding_model': 'jinaai/jina-code-embeddings-0.5b',
+            'reranker_model': 'jinaai/jina-reranker-v3',
+            'device': 'cuda',
+            'max_indices': 50,
+            'max_cache_size_gb': None,
+        }))
         generator = CodeSearchGenerator(
             generator_cfg=cfg.generator,
+            semantic_search_cfg=semantic_search_cfg,
             skyrl_gym_cfg=OmegaConf.create({"max_env_workers": 0}),
             inference_engine_client=inference_engine_client,
             tokenizer=tokenizer,
@@ -81,8 +90,45 @@ def main(cfg: DictConfig) -> None:
                 {"fn": "file_localization_f1_reward"},
             ]
 
-    initialize_ray(cfg)
-    ray.get(skyrl_entrypoint.remote(cfg))
+    semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({'enabled': False}))
+    
+    if semantic_search_cfg.enabled:
+        print("Initializing Semantic Search")
+
+        # Check if indices are pre-computed
+        from pathlib import Path
+        cache_dir = Path.home() / ".cache" / "swebench_indices"
+        if not cache_dir.exists() or len(list(cache_dir.iterdir())) == 0:
+            print("⚠️  WARNING: No pre-computed indices found!")
+            print("   Run pre-indexing first: python preindex_swebench.py")
+        else:
+            num_indices = len(list(cache_dir.iterdir()))
+            print(f"Found {num_indices} pre-computed indices in {cache_dir}")
+
+        # Initialize shared embedding service
+        from src.services.embedding_service import get_embedding_service
+        
+        device = semantic_search_cfg.device
+        max_indices = semantic_search_cfg.max_indices
+        max_cache_size_gb = semantic_search_cfg.max_cache_size_gb
+
+        print(f"\nInitializing embedding service:")
+        print(f"  - Device: {device}")
+        print(f"  - Embedding model: {semantic_search_cfg.embedding_model}")
+        print(f"  - Reranker model: {semantic_search_cfg.reranker_model}")
+        print(f"  - LRU cache: max {max_indices} indices")
+        if max_cache_size_gb:
+            print(f"  - Disk limit: {max_cache_size_gb:.1f} GB")
+
+        embedding_service = get_embedding_service(
+            device=device,
+            max_indices=max_indices,
+            max_cache_size_gb=max_cache_size_gb,
+        )
+
+        stats = ray.get(embedding_service.get_cache_stats.remote())
+        print(f"Embedding service ready!")
+        print(f"  - Cache: {stats['loaded_indices']}/{stats['max_indices']} indices loaded")
 
 
 if __name__ == "__main__":

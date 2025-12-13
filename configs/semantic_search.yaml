@@ -1,0 +1,14 @@
+semantic_search:
+  enabled: false
+  embedding_model: "jinaai/jina-code-embeddings-0.5b"
+  reranker_model: "jinaai/jina-reranker-v3"
+  device: "cuda"
+  max_indices: 50
+  max_cache_size_gb: null
+  
+  # Prompt configuration
+  prompts:
+    with_semantic_search:
+      system_prompt: "src/prompts/system_prompt_semantic.py"
+    without_semantic_search:
+      system_prompt: "src/prompts/system_prompt_basic.py"
