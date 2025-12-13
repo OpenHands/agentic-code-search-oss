@@ -29,7 +29,7 @@ MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 # Get number of GPUs available
 NUM_GPUS=$(nvidia-smi -L | wc -l)
 N_ROLLOUTS="${N_ROLLOUTS:-8}"
-BATCH_SIZE=4
+BATCH_SIZE=8
 MAX_LENGTH=8192
 RUN_NAME="code_search_${MODEL_ALIAS}"
 set -x
@@ -75,8 +75,8 @@ uv run --isolated -m src.train \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.dump_data_batch=true \
   trainer.export_path="$CKPT_PATH/exported_model/" \
-  trainer.hf_save_interval=10 \
-  trainer.ckpt_interval=10 \
+  trainer.hf_save_interval=5 \
+  trainer.ckpt_interval=5 \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.max_input_length=24000 \

@@ -14,7 +14,7 @@
 for i in $(seq 1 10)
 do
   echo "Run number: $i"
-  # Kill any process using port 8080 after 10 hours
-  ( sleep 36000 && fuser -k 8080/tcp ) & \
+  # Kill any process using port 8080 after 5 hours
+  ( sleep 18000 && fuser -k 8080/tcp ) & \
   bash scripts/run_async_training.sh "$@"
 done
