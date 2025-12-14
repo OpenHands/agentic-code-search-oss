@@ -20,6 +20,9 @@ from collections import defaultdict
 import signal
 from contextlib import contextmanager
 
+import gcsfs
+import fsspec
+
 from skyrl_train.generators.skyrl_gym_generator import (
     SkyRLGymGenerator,
     GeneratorOutput,
@@ -369,19 +372,29 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
         #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
 
-        path = Path(self.generator_cfg.traj_dir) / f"step_{batch_metadata.global_step}" / batch_metadata.training_phase
-        path.mkdir(parents=True, exist_ok=True)
+        # Add "/" at the end of traj_dir if not present
+        if not self.generator_cfg.traj_dir.endswith("/"):
+            self.generator_cfg.traj_dir += "/"
+
+        path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
+        # Check if traj_dir is a gcs path
+        if path.startswith("gs://"):
+            
+            fs = gcsfs.GCSFileSystem()
+        else:
+            fs = fsspec.filesystem("file")
+        
         instance_id = env_extras["instance_id"]
 
         if error is not None:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.error"
-            filename_path = path / filename
+            filename_path = path + filename
             print(f"Saving error to {filename_path}")
-            with open(filename_path, "w") as f:
+            with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 f.write(error)
         else:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.json"
-            filename_path = path / filename
+            filename_path = path + filename
 
             result_dict = {
                 "target": env_extras["target"],
@@ -392,7 +405,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             }
 
             print(f"Saving trajectory to {filename_path}")
-            with open(filename_path, "w") as f:
+            with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
 
         # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
