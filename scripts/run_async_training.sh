@@ -1,11 +1,9 @@
 #!/bin/bash
-#SBATCH --partition=flame
-#SBATCH --qos=flame-16gpu_qos
-#SBATCH --account=gneubig
+#SBATCH --partition=PARTITION
 #SBATCH --job-name=cso
 #SBATCH --output=../logs/%j.out
 #SBATCH --error=../logs/%j.out
-#SBATCH --gres=gpu:8
+#SBATCH --gres=GPU
 #SBATCH --nodes=1
 #SBATCH --time=2-00:00:00
 #SBATCH --mem=1500G
