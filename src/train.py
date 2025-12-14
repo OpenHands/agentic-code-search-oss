@@ -77,7 +77,6 @@ def main(cfg: DictConfig) -> None:
     else:
         with open_dict(cfg):
             cfg.generator.reward = [
-                {"fn": "multiturn_reward"},
                 {"fn": "file_localization_f1_reward"},
             ]
 
