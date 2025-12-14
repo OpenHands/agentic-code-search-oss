@@ -1,18 +1,20 @@
 #!/bin/bash
+#SBATCH --partition=flame
+#SBATCH --qos=flame-16gpu_qos
+#SBATCH --account=gneubig
 #SBATCH --job-name=cso
 #SBATCH --output=../logs/%j.out
 #SBATCH --error=../logs/%j.out
-#SBATCH --partition=general
-#SBATCH --gres=gpu:L40S:8
+#SBATCH --gres=gpu:8
 #SBATCH --nodes=1
 #SBATCH --time=2-00:00:00
-#SBATCH --mem=700G
-#SBATCH --cpus-per-task=8
+#SBATCH --mem=1500G
+#SBATCH --cpus-per-task=32
 #SBATCH --ntasks-per-node=1
 
 . .env
 
-while getopts ":m:n:d:s:o:i:t:" opt; do
+while getopts ":m:n:d:s:o:i:t:b:" opt; do
   case ${opt} in
     m ) MODEL=$OPTARG;;
     n ) N_ROLLOUTS=$OPTARG;;
@@ -21,6 +23,7 @@ while getopts ":m:n:d:s:o:i:t:" opt; do
     o ) OTHER_OPTION=$OPTARG;;
     i ) NUM_INFERENCE_ENGINES=$OPTARG;;
     t ) NUM_TRAINING_ENGINES=$OPTARG;;
+    b ) MICRO_BATCH_SIZE=$OPTARG;;
     # \? ) echo "Usage: cmd [-u] [-p]";;
   esac
 done
@@ -41,6 +44,10 @@ mkdir -p $CKPT_PATH
 HALF_NUM_GPUS=$((NUM_GPUS / 2))
 NUM_INFERENCE_ENGINES="${NUM_INFERENCE_ENGINES:-$HALF_NUM_GPUS}"
 NUM_TRAINING_ENGINES="${NUM_TRAINING_ENGINES:-$HALF_NUM_GPUS}"
+
+export VLLM_FLASH_ATTN_VERSION=2
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_USE_CUDA_DSA=1
 
 uv run --isolated -m src.train \
   +run_async_trainer=true \
@@ -72,13 +79,14 @@ uv run --isolated -m src.train \
   trainer.train_batch_size=${BATCH_SIZE} \
   trainer.policy_mini_batch_size=${BATCH_SIZE} \
   trainer.micro_forward_batch_size_per_gpu=1 \
-  trainer.micro_train_batch_size_per_gpu=1 \
+  trainer.micro_train_batch_size_per_gpu=${MICRO_BATCH_SIZE:-1} \
   trainer.dump_data_batch=true \
-  trainer.export_path="$CKPT_PATH/exported_model/" \
-  trainer.hf_save_interval=5 \
-  trainer.ckpt_interval=5 \
+  trainer.export_path="${CKPT_PATH}exported_model/" \
+  trainer.hf_save_interval=10 \
+  trainer.ckpt_interval=10 \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
+  generator.sampling_params.temperature=1.0 \
   generator.max_input_length=24000 \
   generator.max_num_batched_tokens=48000 \
   generator.max_turns=20 \
