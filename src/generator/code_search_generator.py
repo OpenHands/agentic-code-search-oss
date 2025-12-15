@@ -17,6 +17,7 @@ from datetime import datetime
 import numpy as np
 from collections import defaultdict
 
+import re
 import signal
 from contextlib import contextmanager
 
@@ -121,7 +122,7 @@ def init_and_run(
 
     conversation = Conversation(
         agent=agent,
-        max_iteration_per_run=8,
+        max_iteration_per_run=10,
         visualizer=None,
         workspace=str(working_dir),
     )
@@ -274,6 +275,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 **reward_items,
             }
 
+        if final_message == "":
+            reward = - 1.0
+
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
         # Compute Trajectory Metrics
@@ -290,11 +294,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         }
 
         print(f"Trajectory metrics: {metrics_dict}")
-
-        #     # print("=" * 100)
-        #     # print("Conversation finished. Got the following LLM messages:")
-        #     # for i, message in enumerate(messages):
-        #     #     print(f"Message {i}: {str(message)[:200]}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
@@ -328,50 +327,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
             )
 
-
-        #     stop_reason = "complete"
-        #     prompt_ids_list = []
-        #     response_ids_list = []
-        #     trajectory_ids_list = []
-        #     loss_mask = []
-        #     initial_input_len = 0
-        #     past_trajectory_len = 0
-        #     for idx, message in enumerate(token_messages):
-        #         current_prompt_ids = message["prompt_token_ids"]
-        #         current_response_ids = message["response_token_ids"]
-
-        #         prompt_ids_list.append(current_prompt_ids)
-        #         response_ids_list.append(current_response_ids)
-        #         trajectory_ids_list.append(current_prompt_ids + current_response_ids)
-
-        #         if idx == 0:
-        #             initial_input_ids = current_prompt_ids
-        #             initial_input_len = len(initial_input_ids)
-        #             loss_mask = [1] * len(current_response_ids)
-        #             continue
-
-        #         past_trajectory_len = len(trajectory_ids_list[idx-1])
-        #         past_response_len = len(response_ids_list[idx-1])
-        #         current_prompt_len = len(current_prompt_ids)
-        #         current_response_len = len(current_response_ids)
-
-        #         # print("idx:", idx)
-        #         # print("initial_input_ids_len:", initial_input_len)
-        #         # print("past_trajectory_len:", past_trajectory_len)
-        #         # print("past_response_len:", past_response_len)
-        #         # print("current_prompt_len:", current_prompt_len)
-        #         # print("current_response_len:", current_response_len)
-
-        #         # past_prompt_len = len(prompt_ids_list[idx-1]) if idx > 0 else 0
-        #         past_response_observation_ids = current_prompt_ids[past_trajectory_len:]
-        #         past_response_observation_len = len(past_response_observation_ids)
-        #         # print("past_response_observation_len:", past_response_observation_len)
-        #         loss_mask.extend([0] * past_response_observation_len)
-        #         loss_mask.extend([1] * current_response_len)
-            
-        #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
-        #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
-
         # Add "/" at the end of traj_dir if not present
         if not self.generator_cfg.traj_dir.endswith("/"):
             self.generator_cfg.traj_dir += "/"
@@ -396,10 +351,18 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             filename = f"{instance_id}_{trajectory_id.repetition_id}.json"
             filename_path = path + filename
 
+            # get everything between ```` with regex
+            raw_final_message = final_message
+            matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
+            parsed_final_message = matches[0] if matches else final_message
+
             result_dict = {
+                "instance_id": instance_id,
                 "target": env_extras["target"],
+                "total_reward": reward,
                 "reward_dict": reward_dict,
-                "final_message": final_message,
+                "parsed_final_message": parsed_final_message,
+                "raw_final_message": raw_final_message,
                 "messages": messages,
                 "metrics_dict": metrics_dict,
             }
