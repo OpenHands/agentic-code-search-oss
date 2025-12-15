@@ -6,7 +6,7 @@ cd "$SCRIPT_DIR"
 export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
 
 if [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
-    exec "$SCRIPT_DIR/.venv/bin/python" src/mcp_server/training_semantic_search_server.py
+    exec "$SCRIPT_DIR/.venv/bin/python" ../src/mcp_server/training_semantic_search_server.py
 else
-    exec python src/mcp_server/training_semantic_search_server.py
+    exec python ../src/mcp_server/training_semantic_search_server.py
 fi

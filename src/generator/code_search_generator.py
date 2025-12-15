@@ -4,7 +4,7 @@ from pyexpat.errors import messages
 from socket import timeout
 from typing import Dict, List, Optional, Any, Tuple, Union
 import uuid
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import traceback
 import ray
 import requests
@@ -112,57 +112,85 @@ def init_and_run(
         messages = []
 
         # Configure semantic search if enabled
-        use_semantic_search = semantic_search_cfg.enabled
+        use_semantic_search = semantic_search_cfg.get("enabled", False)
         mcp_config = None
         agent_context = None
 
-        if use_semantic_search:
-            from openhands.sdk.context.skills import Skill
-            from openhands.sdk import AgentContext
+        print(f"[Episode {instance_id}] Semantic search config: {OmegaConf.to_yaml(semantic_search_cfg)}")
+        print(f"[Episode {instance_id}] Semantic search enabled: {use_semantic_search}")
 
-            # Get base path
-            base_path = Path(generator_cfg.get("base_path", "/data/user_data/sanidhyv/agentic-code-search-oss"))
-            skill_path = base_path / ".openhands" / "skills" / "semantic-search.md"
-            
-            if not skill_path.exists():
-                print(f"[Episode {instance_id}] Warning: Skill file not found, semantic search disabled")
-                use_semantic_search = False
-            else:
-                skill = Skill.load(str(skill_path))
-                wrapper_path = base_path / "scripts/run_mcp_server_training.sh"
+        if use_semantic_search:
+            try:
+                from openhands.sdk.context.skills import Skill
+                from openhands.sdk import AgentContext
+
+                # Get base path
+                base_path = Path(generator_cfg.get("base_path", "/data/user_data/sanidhyv/agentic-code-search-oss"))
+                skill_path = base_path / ".openhands" / "skills" / "semantic-search.md"
                 
-                if not wrapper_path.exists():
-                    print(f"[Episode {instance_id}] Warning: MCP wrapper not found")
+                print(f"[Episode {instance_id}] Looking for skill at: {skill_path}")
+                
+                if not skill_path.exists():
+                    print(f"[Episode {instance_id}] ERROR: Skill file not found at {skill_path}, semantic search disabled")
                     use_semantic_search = False
                 else:
-                    import stat
-                    wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IEXEC)
+                    print(f"[Episode {instance_id}] Loading skill from {skill_path}")
+                    skill = Skill.load(str(skill_path))
+                    print(f"[Episode {instance_id}] Skill loaded successfully")
                     
-                    # Track index location for cleanup
-                    from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
-                    repo_commit_hash = get_repo_commit_hash(repo_name, commit_id)
-                    index_path = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
+                    wrapper_path = base_path / "scripts/run_mcp_server_training.sh"
                     
-                    mcp_config = {
-                        "mcpServers": {
-                            "semantic-code-search": {
-                                "command": "bash",
-                                "args": [str(wrapper_path)],
-                                "env": {
-                                    "WORKSPACE_PATH": str(working_dir),
-                                    "RAY_ADDRESS": os.environ.get("RAY_ADDRESS", "auto"),
-                                    "PYTHONPATH": str(base_path),
+                    print(f"[Episode {instance_id}] Looking for MCP wrapper at: {wrapper_path}")
+                    
+                    if not wrapper_path.exists():
+                        print(f"[Episode {instance_id}] ERROR: MCP wrapper not found at {wrapper_path}")
+                        use_semantic_search = False
+                    else:
+                        import stat
+                        wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IEXEC)
+                        print(f"[Episode {instance_id}] MCP wrapper found and made executable")
+                        
+                        # Track index location for cleanup
+                        from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
+                        repo_commit_hash = get_repo_commit_hash(repo_name, commit_id)
+                        index_path = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
+                        
+                        print(f"[Episode {instance_id}] Index will be stored at: {index_path}")
+                        
+                        mcp_config = {
+                            "mcpServers": {
+                                "semantic-code-search": {
+                                    "command": "bash",
+                                    "args": [str(wrapper_path)],
+                                    "env": {
+                                        "WORKSPACE_PATH": str(working_dir),
+                                        "RAY_ADDRESS": os.environ.get("RAY_ADDRESS", "auto"),
+                                        "PYTHONPATH": str(base_path),
+                                    }
                                 }
                             }
                         }
-                    }
-                    
-                    agent_context = AgentContext(skills=[skill])
-                    print(f"[Episode {instance_id}] Semantic search enabled")
-                    
-                    # Mark that we'll create an index
-                    if not index_path.exists():
-                        created_index = True
+                        
+                        print(f"[Episode {instance_id}] MCP config created: {mcp_config}")
+                        
+                        agent_context = AgentContext(skills=[skill])
+                        print(f"[Episode {instance_id}] Agent context created with semantic search skill")
+                        
+                        # Mark that we'll create an index
+                        if not index_path.exists():
+                            created_index = True
+                            print(f"[Episode {instance_id}] Will create new index (marked for cleanup)")
+                        else:
+                            print(f"[Episode {instance_id}] Index already exists (will not cleanup)")
+                            
+                        print(f"[Episode {instance_id}] ✓ Semantic search fully configured")
+                        
+            except Exception as e:
+                print(f"[Episode {instance_id}] ERROR setting up semantic search: {e}")
+                traceback.print_exc()
+                use_semantic_search = False
+                mcp_config = None
+                agent_context = None
 
         # Agent creation
         agent_kwargs = {
@@ -184,8 +212,13 @@ def init_and_run(
         if use_semantic_search and mcp_config is not None and agent_context is not None:
             agent_kwargs["agent_context"] = agent_context
             agent_kwargs["mcp_config"] = mcp_config
+            print(f"[Episode {instance_id}] Agent will be created WITH semantic search (mcp_config and agent_context)")
+        else:
+            print(f"[Episode {instance_id}] Agent will be created WITHOUT semantic search")
         
+        print(f"[Episode {instance_id}] Creating agent with kwargs keys: {list(agent_kwargs.keys())}")
         agent = Agent(**agent_kwargs)
+        print(f"[Episode {instance_id}] Agent created successfully")
 
         conversation = Conversation(
             agent=agent,
@@ -193,7 +226,12 @@ def init_and_run(
             visualizer=None,
             workspace=str(working_dir),
         )
-        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
+                
+        prompt_template = "file_module.j2"
+        
+        print(f"[Episode {instance_id}] Using prompt template: {prompt_template}")
+        
+        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", prompt_template)
         input_message = get_instruction(instance, prompt_path, str(working_dir))
         
         # Truncate input if too long
@@ -201,7 +239,7 @@ def init_and_run(
         MAX_INPUT_TOKENS = 12000
         try:
             tokenizer = AutoTokenizer.from_pretrained(
-                litellm_model_name,
+                litellm_model_name.replace("litellm_proxy/", ""),
                 trust_remote_code=True,
                 cache_dir="/data/user_data/sanidhyv/.cache/huggingface"
             )
@@ -215,7 +253,7 @@ def init_and_run(
             print(f"[Episode {instance_id}] Could not check input length: {e}")
         
         conversation.send_message(input_message)
-        print("Starting conversation...")
+        print(f"[Episode {instance_id}] Starting conversation...")
         logger.info("Conversation Starting")
 
         # Capture start time
@@ -229,6 +267,7 @@ def init_and_run(
 
         conversation.close()
         logger.info("Conversation Finished")
+        print(f"[Episode {instance_id}] Conversation finished")
 
         # Capture end time
         end_time = time.time()
@@ -238,9 +277,16 @@ def init_and_run(
         additional_attr = {
             "wall_clock_duration": wall_clock_duration,
             "start_timestamp": start_timestamp,
-            "end_timestamp": end_timestamp
+            "end_timestamp": end_timestamp,
         }
 
+        return messages, final_message, additional_attr, use_semantic_search
+
+    except Exception as e:
+        print(f"[Episode {instance_id}] ERROR in init_and_run: {e}")
+        traceback.print_exc()
+        raise
+        
     finally:
         # Cleanup workspace and index
         print(f"[Worker {worker_id}] Cleaning up episode {instance_id}")
@@ -260,8 +306,6 @@ def init_and_run(
                 print(f"[Worker {worker_id}] Removed index: {index_path}")
             except Exception as e:
                 print(f"[Worker {worker_id}] Warning: Could not remove index: {e}")
-    
-    return messages, final_message, additional_attr
 
            
     
@@ -299,6 +343,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             raise NotImplementedError(
                 "OpenhandsGenerator doesn't support custom chat template"
             )
+            
+        print(f"CodeSearchGenerator initialized with semantic_search enabled: {self.semantic_search_cfg.get('enabled', False)}")
 
     async def code_search_loop(
         self,
@@ -316,7 +362,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         error = None
         try:
 
-            messages, final_message, additional_attr = await init_and_run.remote(
+            messages, final_message, additional_attr, used_semantic_search = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
                 self.base_url,
@@ -337,8 +383,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
-                "end_timestamp": None
+                "end_timestamp": None,
             }
+            used_semantic_search = False
 
         # print("=" * 100)
         # print("Conversation finished. Got the following LLM messages:")
@@ -386,16 +433,21 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
         # Compute Trajectory Metrics
+        # Filter out non-efficiency keys before passing to compute_all_efficiency_metrics
+        efficiency_keys = {'wall_clock_duration', 'start_timestamp', 'end_timestamp'}
+        efficiency_attr = {k: v for k, v in additional_attr.items() if k in efficiency_keys}
+        
         efficiency_metrics = compute_all_efficiency_metrics(
             messages=messages,
-            **additional_attr,
+            **efficiency_attr,
         )
 
         trajectory_metrics = compute_trajectory_metrics(messages)
 
         metrics_dict = {
             **efficiency_metrics,
-            **trajectory_metrics
+            **trajectory_metrics,
+            "used_semantic_search": used_semantic_search,
         }
 
         print(f"Trajectory metrics: {metrics_dict}")
