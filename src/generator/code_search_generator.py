@@ -121,7 +121,7 @@ def init_and_run(
             from openhands.sdk import AgentContext
 
             # Get base path
-            base_path = Path(generator_cfg.get("base_path", "/home/sanidhyv/agentic-code-search-oss"))
+            base_path = Path(generator_cfg.get("base_path", "/data/user_data/sanidhyv/agentic-code-search-oss"))
             skill_path = base_path / ".openhands" / "skills" / "semantic-search.md"
             
             if not skill_path.exists():
@@ -129,7 +129,7 @@ def init_and_run(
                 use_semantic_search = False
             else:
                 skill = Skill.load(str(skill_path))
-                wrapper_path = base_path / "run_mcp_server_training.sh"
+                wrapper_path = base_path / "scripts/run_mcp_server_training.sh"
                 
                 if not wrapper_path.exists():
                     print(f"[Episode {instance_id}] Warning: MCP wrapper not found")

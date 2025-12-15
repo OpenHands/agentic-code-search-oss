@@ -1,10 +1,9 @@
 semantic_search:
-  enabled: false
+  enabled: true
   embedding_model: "jinaai/jina-code-embeddings-0.5b"
-  reranker_model: "jinaai/jina-reranker-v3"
+  reranker_model: null
   device: "cuda"
   max_indices: 50
-  max_cache_size_gb: null
   
   # Prompt configuration
   prompts:
