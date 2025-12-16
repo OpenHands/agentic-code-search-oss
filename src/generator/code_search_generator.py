@@ -122,7 +122,7 @@ def init_and_run(
 
     conversation = Conversation(
         agent=agent,
-        max_iteration_per_run=10,
+        max_iteration_per_run=20,
         visualizer=None,
         workspace=str(working_dir),
     )
@@ -276,7 +276,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             }
 
         if final_message == "":
-            reward = - 1.0
+            reward = -10.0
 
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
@@ -334,9 +334,10 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
         # Check if traj_dir is a gcs path
         if path.startswith("gs://"):
-            
+            use_gcs = True
             fs = gcsfs.GCSFileSystem()
         else:
+            use_gcs = False
             fs = fsspec.filesystem("file")
         
         instance_id = env_extras["instance_id"]
@@ -345,11 +346,16 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             filename = f"{instance_id}_{trajectory_id.repetition_id}.error"
             filename_path = path + filename
             print(f"Saving error to {filename_path}")
+            if use_gcs == False:
+                os.makedirs(os.path.dirname(filename_path), exist_ok=True)
             with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 f.write(error)
         else:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.json"
             filename_path = path + filename
+
+            if use_gcs == False:
+                os.makedirs(os.path.dirname(filename_path), exist_ok=True)
 
             # get everything between ```` with regex
             raw_final_message = final_message
