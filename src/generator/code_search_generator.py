@@ -103,9 +103,10 @@ def init_and_run(
     final_message = ""
     messages = []
 
-    logger.info(f"Using tools: {generator_cfg.tools}")
+    tools = [
+        Tool(name=tool_name) for tool_name in generator_cfg.tools
+    ]
 
-    # agent = Agent(
     agent = CustomAgent(
         llm=LLM(
             usage_id="agent",
@@ -118,8 +119,7 @@ def init_and_run(
                 "include_stop_str_in_output": True,
             }
         ),
-        # tools=get_planning_tools(),
-        tools=[Tool(name=TerminalTool.name)],
+        tools=tools,
         security_analyzer=None,
         system_prompt_filename=os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "system_prompt.j2")
     )

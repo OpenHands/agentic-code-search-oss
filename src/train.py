@@ -68,18 +68,6 @@ def main(cfg: DictConfig) -> None:
     # validate the arguments
     validate_cfg(cfg)
 
-    # Check cfg.generator.reward if it exists or not
-    # if hasattr(cfg.generator, "reward"):
-    #     # Open yaml file and print its contents
-    #     with open(cfg.generator.reward, "r") as f:
-    #         reward_cfg = OmegaConf.load(f)
-    #     cfg.generator.reward = reward_cfg.reward
-    # else:
-    #     with open_dict(cfg):
-    #         cfg.generator.reward = [
-    #             {"fn": "multilevel_localization_f1_reward"},
-    #         ]
-
     # check cfg.generator.exp_config if it exists or not
     if hasattr(cfg.generator, "exp_config"):
         # Open yaml file and print its contents
