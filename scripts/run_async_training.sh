@@ -1,14 +1,4 @@
 #!/bin/bash
-#SBATCH --partition=PARTITION
-#SBATCH --job-name=cso
-#SBATCH --output=../logs/%j.out
-#SBATCH --error=../logs/%j.out
-#SBATCH --gres=GPU
-#SBATCH --nodes=1
-#SBATCH --time=2-00:00:00
-#SBATCH --mem=1500G
-#SBATCH --cpus-per-task=32
-#SBATCH --ntasks-per-node=1
 
 . .env
 
@@ -59,7 +49,7 @@ uv run --isolated -m src.train \
   trainer.policy.fsdp_config.cpu_offload=true \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
-  trainer.fully_async.num_parallel_generation_workers=20 \
+  trainer.fully_async.num_parallel_generation_workers=16 \
   trainer.placement.policy_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
   trainer.placement.ref_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
   trainer.placement.policy_num_nodes=1 \
@@ -68,7 +58,9 @@ uv run --isolated -m src.train \
   generator.num_inference_engines=${NUM_INFERENCE_ENGINES} \
   generator.inference_engine_tensor_parallel_size=1 \
   +generator.traj_dir=${CKPT_PATH}trajectories/ \
-  +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,reasoning_parser:qwen3}" \
+  +generator.engine_init_kwargs.enable_auto_tool_choice=true \
+  +generator.engine_init_kwargs.tool_call_parser=hermes \
+  +generator.engine_init_kwargs.reasoning_parser=qwen3 \
   trainer.epochs=20 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
@@ -80,8 +72,8 @@ uv run --isolated -m src.train \
   trainer.micro_train_batch_size_per_gpu=${MICRO_BATCH_SIZE:-1} \
   trainer.dump_data_batch=true \
   trainer.export_path="${CKPT_PATH}exported_model/" \
-  trainer.hf_save_interval=10 \
-  trainer.ckpt_interval=10 \
+  trainer.hf_save_interval=5 \
+  trainer.ckpt_interval=5 \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
@@ -107,5 +99,5 @@ uv run --isolated -m src.train \
   trainer.run_name=${RUN_NAME} \
   trainer.resume_mode=latest \
   trainer.ckpt_path="$CKPT_PATH" \
-  trainer.max_ckpts_to_keep=2 \
+  trainer.max_ckpts_to_keep=3 \
   $OTHER_OPTION

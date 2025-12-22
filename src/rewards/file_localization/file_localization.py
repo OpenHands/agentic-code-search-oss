@@ -35,7 +35,7 @@ def file_localization_f1_reward(
     return weighted_file_score, {"file_level_score": file_level_score}
 
 @reward("multilevel_localization_f1_reward")
-def reward_function(
+def multilevel_localization_f1_reward(
     final_message: str,
     instance: dict,
     file_level_weight: float=1.0,

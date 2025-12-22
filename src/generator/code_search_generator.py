@@ -19,6 +19,7 @@ from datetime import datetime
 import numpy as np
 from collections import defaultdict
 
+import re
 import signal
 from contextlib import contextmanager
 
@@ -58,6 +59,7 @@ from openhands.sdk import (
 
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
+from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
 
@@ -196,21 +198,22 @@ def init_and_run(
                 mcp_config = None
                 agent_context = None
 
-        # Agent creation
+        # Agent creation - use CustomAgent with optional semantic search
         agent_kwargs = {
             "llm": LLM(
-                service_id="agent",
+                usage_id="agent",
                 model=litellm_model_name,
-                base_url=f"http://localhost:8080/v1/",
-                api_key=SecretStr("dummy"),
+                base_url=litellm_base_url,
+                api_key="sk-xxx",
                 temperature=temperature,
                 litellm_extra_body={
                     "return_token_ids": True,
                     "include_stop_str_in_output": True,
                 }
             ),
-            "tools": get_planning_tools(),
+            "tools": [Tool(name=TerminalTool.name)],
             "security_analyzer": None,
+            "system_prompt_filename": os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "system_prompt.j2")
         }
         
         if use_semantic_search and mcp_config is not None and agent_context is not None:
@@ -221,21 +224,17 @@ def init_and_run(
             print(f"[Episode {instance_id}] Agent will be created WITHOUT semantic search")
         
         print(f"[Episode {instance_id}] Creating agent with kwargs keys: {list(agent_kwargs.keys())}")
-        agent = Agent(**agent_kwargs)
+        agent = CustomAgent(**agent_kwargs)
         print(f"[Episode {instance_id}] Agent created successfully")
 
         conversation = Conversation(
             agent=agent,
-            max_iteration_per_run=8,
+            max_iteration_per_run=10,
             visualizer=None,
             workspace=str(working_dir),
         )
                 
-        prompt_template = "file_module.j2"
-        
-        print(f"[Episode {instance_id}] Using prompt template: {prompt_template}")
-        
-        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", prompt_template)
+        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
         input_message = get_instruction(instance, prompt_path, str(working_dir))
         
         # Truncate input if too long
@@ -310,7 +309,6 @@ def init_and_run(
                 print(f"[Worker {worker_id}] Removed index: {index_path}")
             except Exception as e:
                 print(f"[Worker {worker_id}] Warning: Could not remove index: {e}")
-
            
     
                 
@@ -329,13 +327,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             generator_cfg, skyrl_gym_cfg, inference_engine_client, tokenizer, model_name
         )
 
-        self.http_server_inference_engine_client_host = generator_cfg.get(
-            "http_server_inference_engine_client_host", "127.0.0.1"
+        self.http_endpoint_host = generator_cfg.get(
+            "http_endpoint_host", "127.0.0.1"
         )
-        self.http_server_inference_engine_client_port = generator_cfg.get(
-            "http_server_inference_engine_client_port", 8000
+        self.http_endpoint_port = generator_cfg.get(
+            "http_endpoint_port", 8000
         )
-        self.base_url = f"http://{self.http_server_inference_engine_client_host}:{self.http_server_inference_engine_client_port}"
+        self.base_url = f"http://{self.http_endpoint_host}:{self.http_endpoint_port}/v1/"
+        logger.info(f"Using CodeSearchGenerator with model {model_name} at {self.base_url}")
         self.generator_cfg = generator_cfg
         self.semantic_search_cfg = semantic_search_cfg
         self.tokenizer = tokenizer
@@ -402,20 +401,20 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         reward_dict = {}
 
         for reward_fn_args in self.generator_cfg.reward:
-            input_args = {
-                "final_message": final_message,
-                "messages": messages,
-                "instance": instance,
-            }
-
-            reward_fn = get_reward_function(reward_fn_args["fn"])
-
-            input_args = {
-                **input_args, 
-                **reward_fn_args.get("args", {})
+            try:
+                input_args = {
+                    "final_message": final_message,
+                    "messages": messages,
+                    "instance": instance,
                 }
 
-            try:
+                reward_fn = get_reward_function(reward_fn_args["fn"])
+
+                input_args = {
+                    **input_args, 
+                    **reward_fn_args.get("args", {})
+                    }
+
                 reward_outputs = reward_fn(**input_args)
                 if isinstance(reward_outputs, tuple):
                     reward_value, reward_items = reward_outputs
@@ -433,6 +432,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 **reward_dict,
                 **reward_items,
             }
+
+        if final_message == "":
+            reward = -10.0
 
         print(f"Reward details: {reward_dict}, Total reward: {reward}")
 
@@ -455,11 +457,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         }
 
         print(f"Trajectory metrics: {metrics_dict}")
-
-        #     # print("=" * 100)
-        #     # print("Conversation finished. Got the following LLM messages:")
-        #     # for i, message in enumerate(messages):
-        #     #     print(f"Message {i}: {str(message)[:200]}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
@@ -493,50 +490,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
             )
 
-
-        #     stop_reason = "complete"
-        #     prompt_ids_list = []
-        #     response_ids_list = []
-        #     trajectory_ids_list = []
-        #     loss_mask = []
-        #     initial_input_len = 0
-        #     past_trajectory_len = 0
-        #     for idx, message in enumerate(token_messages):
-        #         current_prompt_ids = message["prompt_token_ids"]
-        #         current_response_ids = message["response_token_ids"]
-
-        #         prompt_ids_list.append(current_prompt_ids)
-        #         response_ids_list.append(current_response_ids)
-        #         trajectory_ids_list.append(current_prompt_ids + current_response_ids)
-
-        #         if idx == 0:
-        #             initial_input_ids = current_prompt_ids
-        #             initial_input_len = len(initial_input_ids)
-        #             loss_mask = [1] * len(current_response_ids)
-        #             continue
-
-        #         past_trajectory_len = len(trajectory_ids_list[idx-1])
-        #         past_response_len = len(response_ids_list[idx-1])
-        #         current_prompt_len = len(current_prompt_ids)
-        #         current_response_len = len(current_response_ids)
-
-        #         # print("idx:", idx)
-        #         # print("initial_input_ids_len:", initial_input_len)
-        #         # print("past_trajectory_len:", past_trajectory_len)
-        #         # print("past_response_len:", past_response_len)
-        #         # print("current_prompt_len:", current_prompt_len)
-        #         # print("current_response_len:", current_response_len)
-
-        #         # past_prompt_len = len(prompt_ids_list[idx-1]) if idx > 0 else 0
-        #         past_response_observation_ids = current_prompt_ids[past_trajectory_len:]
-        #         past_response_observation_len = len(past_response_observation_ids)
-        #         # print("past_response_observation_len:", past_response_observation_len)
-        #         loss_mask.extend([0] * past_response_observation_len)
-        #         loss_mask.extend([1] * current_response_len)
-            
-        #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
-        #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
-
         # Add "/" at the end of traj_dir if not present
         if not self.generator_cfg.traj_dir.endswith("/"):
             self.generator_cfg.traj_dir += "/"
@@ -544,9 +497,10 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
         # Check if traj_dir is a gcs path
         if path.startswith("gs://"):
-            
+            use_gcs = True
             fs = gcsfs.GCSFileSystem()
         else:
+            use_gcs = False
             fs = fsspec.filesystem("file")
         
         instance_id = env_extras["instance_id"]
@@ -555,16 +509,29 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             filename = f"{instance_id}_{trajectory_id.repetition_id}.error"
             filename_path = path + filename
             print(f"Saving error to {filename_path}")
+            if use_gcs == False:
+                os.makedirs(os.path.dirname(filename_path), exist_ok=True)
             with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 f.write(error)
         else:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.json"
             filename_path = path + filename
 
+            if use_gcs == False:
+                os.makedirs(os.path.dirname(filename_path), exist_ok=True)
+
+            # get everything between ```` with regex
+            raw_final_message = final_message
+            matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
+            parsed_final_message = matches[0] if matches else final_message
+
             result_dict = {
+                "instance_id": instance_id,
                 "target": env_extras["target"],
+                "total_reward": reward,
                 "reward_dict": reward_dict,
-                "final_message": final_message,
+                "parsed_final_message": parsed_final_message,
+                "raw_final_message": raw_final_message,
                 "messages": messages,
                 "metrics_dict": metrics_dict,
             }
@@ -573,9 +540,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
 
-        # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
-        # return [rollout_list[-1], reward_dict, metrics_dict]
-        return (rollout_list[-1], reward_dict, metrics_dict)
+        return [rollout_list, reward_dict, metrics_dict]
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
         """
@@ -617,30 +582,21 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         rewards_dict = [rollout[1] for rollout in collected_task_rollouts]
         metrics_dict = [rollout[2] for rollout in collected_task_rollouts]
 
-        # Each output is now a single tuple, not a list of tuples
-        responses = [output[0] for output in all_outputs if output[0] is not None]
-        rewards = [output[1] for output in all_outputs if output[0] is not None]
-        stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
-        loss_masks = [output[3] for output in all_outputs if output[0] is not None]
-        prompt_token_ids = [output[4] for output in all_outputs if output[0] is not None]
-        # # Filter out the `None` entries, which means that trajectory generation failed
-        # responses = [output[0] for output in all_outputs if output[0] is not None]
-        # rewards = [output[1] for output in all_outputs if output[0] is not None]
-        # stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
-        # loss_masks = [output[3] for output in all_outputs if output[0] is not None]
-        # prompt_token_ids = [
-        #     output[4] for output in all_outputs if output[0] is not None
-        # ]
+        responses = sum([[output[0] for output in step_outputs] for step_outputs in all_outputs], [])
+        rewards = sum([[output[1] for output in step_outputs] for step_outputs in all_outputs], [])
+        stop_reasons = sum([[output[2] for output in step_outputs] for step_outputs in all_outputs], [])
+        loss_masks = sum([[output[3] for output in step_outputs] for step_outputs in all_outputs], [])
+        prompt_token_ids = sum([[output[4] for output in step_outputs] for step_outputs in all_outputs], [])
 
-        # out_trajectory_ids = []
-        # is_last_step = []
-        # for i in range(len(all_outputs)):
-        #     step_outputs = all_outputs[i]
-        #     for step_id in range(len(step_outputs)):
-        #         out_trajectory_id = copy.deepcopy(trajectory_ids[i])
-        #         out_trajectory_id.step = step_id
-        #         out_trajectory_ids.append(out_trajectory_id.instance_id)
-        #         is_last_step.append(step_id == len(step_outputs) - 1)
+        out_trajectory_ids = []
+        is_last_step = []
+        for i in range(len(all_outputs)):
+            step_outputs = all_outputs[i]
+            for step_id in range(len(step_outputs)):
+                out_trajectory_id = copy.deepcopy(trajectory_ids[i])
+                out_trajectory_id.step = step_id
+                out_trajectory_ids.append(out_trajectory_id.instance_id)
+                is_last_step.append(step_id == len(step_outputs) - 1)
 
         if not len(responses):
             raise ValueError(

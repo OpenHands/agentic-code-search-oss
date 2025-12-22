@@ -11,7 +11,7 @@ classifiers = [
 requires-python = ">=3.13"
 license = { "text" = "MIT" }
 dependencies = [
-    "skyrl-train @ git+https://github.com/NovaSky-AI/SkyRL.git@main#subdirectory=skyrl-train",
+    "skyrl-train",
     "transformers==4.57.3",
     "openhands-tools",
     "openhands-agent-server",
@@ -28,6 +28,7 @@ dependencies = [
     "matplotlib>=3.10.7",
     "seaborn>=0.13.2",
     "gcsfs>=2025.3.0",
+    "lmcache",
 ]
 
 [build-system]
@@ -67,6 +68,7 @@ explicit = true
 flash-attn = ["torch"]
 
 [tool.uv.sources]
+skyrl-train = { git = "https://github.com/NovaSky-AI/SkyRL", rev = "69ca4d9", subdirectory = "skyrl-train" }
 flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}
 openhands-sdk = { workspace = true }
 openhands-tools = { workspace = true }

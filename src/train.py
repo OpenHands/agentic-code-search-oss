@@ -85,7 +85,7 @@ def main(cfg: DictConfig) -> None:
     else:
         with open_dict(cfg):
             cfg.generator.reward = [
-                {"fn": "file_localization_f1_reward"},
+                {"fn": "multilevel_localization_f1_reward"},
             ]
 
     semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({'enabled': False}))

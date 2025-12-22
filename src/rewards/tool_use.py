@@ -17,17 +17,17 @@ def tool_use_reward(messages, **kwargs) -> float:
     return num_tool_calls/num_turns
 
 @reward("turn_efficiency")
-def turn_efficiency(messages, max_turns=4, **kwargs) -> float:
+def turn_efficiency(messages, max_turns=5, **kwargs) -> float:
     token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
     tool_messages = [msg for msg in messages if msg["kind"] == "ActionEvent"]
     
     num_turns = len(token_messages)
     num_tool_calls = len(tool_messages)
     
-    if num_turns == 0:
+    if num_turns <= 1:
         return 0.0
     
-    if (num_tool_calls >= 1):
+    if (num_tool_calls > 1):
         # Decay the reward if more than max_turns are used
         if num_turns <= max_turns:
             return 1.0
