@@ -1,12 +1,12 @@
 #!/bin/bash
-#SBATCH --partition=general
+#SBATCH --partition=preempt
 #SBATCH --mem=300Gb
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
 #SBATCH -t 2-00:00:00
 #SBATCH --job-name=rl_qwen3_4b
-#SBATCH --error=/home/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
-#SBATCH --output=/home/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
+#SBATCH --error=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
+#SBATCH --output=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
 
@@ -31,7 +31,7 @@ export NCCL_TIMEOUT=1800
 export NCCL_ASYNC_ERROR_HANDLING=1
 export MASTER_ADDR=localhost
 export MASTER_PORT=29500
-export CODE_SEARCH_BASE_PATH="/home/sanidhyv/agentic-code-search-oss"
+export CODE_SEARCH_BASE_PATH="/data/user_data/sanidhyv/agentic-code-search-oss"
 
 # Environment
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
@@ -47,7 +47,7 @@ MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
 CKPT_PATH="/data/user_data/sanidhyv/grep/train"
 N_ROLLOUTS="${N_ROLLOUTS:-4}"
-export WANDB_API_KEY=""
+export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
 export WANDB_PROJECT="grep"
 
 # Resource allocation 
@@ -62,6 +62,7 @@ mkdir -p $CKPT_PATH $CKPT_PATH/trajectories logs
 export RAY_object_store_memory=$((50 * 1024 * 1024 * 1024))  # 50GB
 export RAY_memory_monitor_refresh_ms=0  
 export RAY_object_spilling_config='{"type":"filesystem","params":{"directory_path":"/data/user_data/sanidhyv/ray_spill"}}'
+export HYDRA_FULL_ERROR=1
 
 mkdir -p /data/user_data/sanidhyv/ray_spill
 
@@ -80,7 +81,7 @@ trap cleanup EXIT INT TERM
 set -x
 
 # Launch training 
-CUDA_LAUNCH_BLOCKING=1 uv run --isolated -m src.train \
+CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
   --config-name=ppo_base_config \
   data.train_data=["data/SWE-Gym__SWE-Gym_train/train.parquet"] \
   data.val_data=["data/SWE-Gym__SWE-Gym_train/validation.parquet"] \
@@ -130,10 +131,10 @@ CUDA_LAUNCH_BLOCKING=1 uv run --isolated -m src.train \
   trainer.resume_mode=null \
   trainer.ckpt_path=$CKPT_PATH \
   +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,max_model_len:16384}" \
-  +semantic_search.enabled=true \
-  +semantic_search.device=cpu \
+  +semantic_search.enabled=false \
+  +semantic_search.device=cuda \
   +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
-  +semantic_search.reranker_model="jinaai/jina-reranker-v3" \
+  +semantic_search.reranker_model=null \
   +semantic_search.max_indices=50
 
 CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"

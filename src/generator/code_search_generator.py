@@ -1,3 +1,4 @@
+import copy
 import json
 import asyncio
 from pyexpat.errors import messages
@@ -20,6 +21,9 @@ from collections import defaultdict
 
 import signal
 from contextlib import contextmanager
+
+import gcsfs
+import fsspec
 
 from skyrl_train.generators.skyrl_gym_generator import (
     SkyRLGymGenerator,
@@ -533,19 +537,29 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         #     response_ids = current_prompt_ids[initial_input_len:] + current_response_ids
         #     assert len(response_ids) == len(loss_mask), f"Response ids length {len(response_ids)} != loss mask length {len(loss_mask)}"
 
-        path = Path(self.generator_cfg.traj_dir) / f"step_{batch_metadata.global_step}" / batch_metadata.training_phase
-        path.mkdir(parents=True, exist_ok=True)
+        # Add "/" at the end of traj_dir if not present
+        if not self.generator_cfg.traj_dir.endswith("/"):
+            self.generator_cfg.traj_dir += "/"
+
+        path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
+        # Check if traj_dir is a gcs path
+        if path.startswith("gs://"):
+            
+            fs = gcsfs.GCSFileSystem()
+        else:
+            fs = fsspec.filesystem("file")
+        
         instance_id = env_extras["instance_id"]
 
         if error is not None:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.error"
-            filename_path = path / filename
+            filename_path = path + filename
             print(f"Saving error to {filename_path}")
-            with open(filename_path, "w") as f:
+            with fs.open(filename_path, "w", auto_mkdir=True) as f:
                 f.write(error)
         else:
             filename = f"{instance_id}_{trajectory_id.repetition_id}.json"
-            filename_path = path / filename
+            filename_path = path + filename
 
             result_dict = {
                 "target": env_extras["target"],
@@ -556,11 +570,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             }
 
             print(f"Saving trajectory to {filename_path}")
-            with open(filename_path, "w") as f:
-                json.dump(result_dict, f, indent=2)
+            with fs.open(filename_path, "w", auto_mkdir=True) as f:
+                json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
 
         # return (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None)
-        return [rollout_list[-1], reward_dict, metrics_dict]
+        # return [rollout_list[-1], reward_dict, metrics_dict]
+        return (rollout_list[-1], reward_dict, metrics_dict)
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
         """
@@ -602,14 +617,31 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         rewards_dict = [rollout[1] for rollout in collected_task_rollouts]
         metrics_dict = [rollout[2] for rollout in collected_task_rollouts]
 
-        # Filter out the `None` entries, which means that trajectory generation failed
+        # Each output is now a single tuple, not a list of tuples
         responses = [output[0] for output in all_outputs if output[0] is not None]
         rewards = [output[1] for output in all_outputs if output[0] is not None]
         stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
         loss_masks = [output[3] for output in all_outputs if output[0] is not None]
-        prompt_token_ids = [
-            output[4] for output in all_outputs if output[0] is not None
-        ]
+        prompt_token_ids = [output[4] for output in all_outputs if output[0] is not None]
+        # # Filter out the `None` entries, which means that trajectory generation failed
+        # responses = [output[0] for output in all_outputs if output[0] is not None]
+        # rewards = [output[1] for output in all_outputs if output[0] is not None]
+        # stop_reasons = [output[2] for output in all_outputs if output[0] is not None]
+        # loss_masks = [output[3] for output in all_outputs if output[0] is not None]
+        # prompt_token_ids = [
+        #     output[4] for output in all_outputs if output[0] is not None
+        # ]
+
+        # out_trajectory_ids = []
+        # is_last_step = []
+        # for i in range(len(all_outputs)):
+        #     step_outputs = all_outputs[i]
+        #     for step_id in range(len(step_outputs)):
+        #         out_trajectory_id = copy.deepcopy(trajectory_ids[i])
+        #         out_trajectory_id.step = step_id
+        #         out_trajectory_ids.append(out_trajectory_id.instance_id)
+        #         is_last_step.append(step_id == len(step_outputs) - 1)
+
         if not len(responses):
             raise ValueError(
                 "Found no valid responses for this step. This means that generation failed for all trajectories, likely due to errors in environment setup."
@@ -636,6 +668,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             tracked_metrics[k] = sum(v) / len(v)
 
         generator_output: GeneratorOutput = {
+            # "trajectory_ids": out_trajectory_ids,
             "prompt_token_ids": prompt_token_ids,
             "response_ids": responses,
             "rewards": rewards,
@@ -643,6 +676,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
             "rollout_logprobs": None,
+            # "is_last_step": is_last_step,
             **tracked_metrics,
         }
 

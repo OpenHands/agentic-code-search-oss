@@ -1,5 +1,5 @@
 semantic_search:
-  enabled: true
+  enabled: false
   embedding_model: "jinaai/jina-code-embeddings-0.5b"
   reranker_model: null
   device: "cuda"
