@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=preempt
+#SBATCH --partition=general
 #SBATCH --mem=300Gb
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
@@ -25,7 +25,7 @@ mkdir -p "$UV_CACHE_DIR" "$HF_HOME" "$TRANSFORMERS_CACHE" "$TORCH_HOME" "$TMPDIR
 NETWORK_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
 export NCCL_SOCKET_IFNAME=$NETWORK_INTERFACE
 export NCCL_IB_DISABLE=1
-export NCCL_P2P_DISABLE=1
+export NCCL_P2P_DISABLE=0
 export NCCL_DEBUG=INFO
 export NCCL_TIMEOUT=1800
 export NCCL_ASYNC_ERROR_HANDLING=1
@@ -37,6 +37,9 @@ export CODE_SEARCH_BASE_PATH="/data/user_data/sanidhyv/agentic-code-search-oss"
 export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
 export TOKENIZERS_PARALLELISM=false
 export TORCH_DISTRIBUTED_DEBUG=OFF
+export VLLM_FLASH_ATTN_VERSION=2
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_USE_CUDA_DSA=1
 
 # Load .env if exists
 [ -f .env ] && . .env
@@ -45,18 +48,23 @@ export TORCH_DISTRIBUTED_DEBUG=OFF
 MODEL="Qwen/Qwen3-4B"
 MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
-CKPT_PATH="/data/user_data/sanidhyv/grep/train"
+CKPT_PATH="/data/user_data/sanidhyv/agentic-code-search-oss/ckpts/code_search_${MODEL_ALIAS}"
 N_ROLLOUTS="${N_ROLLOUTS:-4}"
+BATCH_SIZE=4  # Keep smaller for memory constraints with semantic search
+MAX_LENGTH=2048
 export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
-export WANDB_PROJECT="grep"
+export WANDB_PROJECT="code_search"
 
-# Resource allocation 
+# Resource allocation - adjusted for semantic search memory requirements
 NUM_GPUS=8
 NNODES=1
-NUM_INFERENCE_ENGINES=8  
+# Split GPUs: half for inference, half for training (like run_async_training.sh)
+HALF_NUM_GPUS=$((NUM_GPUS / 2))
+NUM_INFERENCE_ENGINES=4  # Half of GPUs for inference
+NUM_TRAINING_ENGINES=4   # Half of GPUs for training
 TP_SIZE=1  
 LOGGER=wandb
-RUN_NAME="code_search_${MODEL_ALIAS}"
+RUN_NAME="code_search_${MODEL_ALIAS}_semantic"
 
 mkdir -p $CKPT_PATH $CKPT_PATH/trajectories logs
 export RAY_object_store_memory=$((50 * 1024 * 1024 * 1024))  # 50GB
@@ -66,9 +74,10 @@ export HYDRA_FULL_ERROR=1
 
 mkdir -p /data/user_data/sanidhyv/ray_spill
 
-echo "Starting RL Training (Working Config)"
+echo "Starting RL Training with Semantic Search"
 echo "Model: $MODEL"
 echo "N Rollouts: $N_ROLLOUTS"
+echo "Batch Size: $BATCH_SIZE"
 echo "======================================"
 
 # Cleanup
@@ -83,33 +92,46 @@ set -x
 # Launch training 
 CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
   --config-name=ppo_base_config \
-  data.train_data=["data/SWE-Gym__SWE-Gym_train/train.parquet"] \
-  data.val_data=["data/SWE-Gym__SWE-Gym_train/validation.parquet"] \
+  +run_async_trainer=true \
+  data.train_data=["$DATA_PATH/train.parquet"] \
+  data.val_data=["$DATA_PATH/validation.parquet"] \
   trainer.algorithm.advantage_estimator=grpo \
   trainer.policy.model.path=$MODEL \
-  trainer.placement.colocate_all=true \
+  trainer.placement.colocate_all=false \
+  trainer.placement.colocate_policy_ref=true \
   trainer.strategy=fsdp2 \
-  trainer.placement.policy_num_gpus_per_node=$NUM_GPUS \
-  trainer.placement.ref_num_gpus_per_node=$NUM_GPUS \
+  trainer.policy.fsdp_config.cpu_offload=true \
+  trainer.policy.fsdp_config.reshard_after_forward=true \
+  trainer.policy.fsdp_config.fsdp_size=-1 \
+  trainer.fully_async.num_parallel_generation_workers=8 \
+  trainer.placement.policy_num_gpus_per_node=$NUM_TRAINING_ENGINES \
+  trainer.placement.ref_num_gpus_per_node=$NUM_TRAINING_ENGINES \
   trainer.placement.policy_num_nodes=$NNODES \
   trainer.placement.ref_num_nodes=$NNODES \
-  trainer.policy.sequence_parallel_size=8 \
+  trainer.policy.sequence_parallel_size=1 \
   generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
   generator.inference_engine_tensor_parallel_size=$TP_SIZE \
-  +generator.traj_dir=/data/user_data/sanidhyv/grep/train/trajectories/ \
+  +generator.traj_dir=$CKPT_PATH/trajectories/ \
+  +generator.engine_init_kwargs.enable_auto_tool_choice=true \
+  +generator.engine_init_kwargs.tool_call_parser=hermes \
+  +generator.engine_init_kwargs.reasoning_parser=qwen3 \
+  +generator.engine_init_kwargs.max_model_len=16384 \
   trainer.epochs=20 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
   trainer.eval_interval=100 \
   trainer.update_epochs_per_batch=1 \
-  trainer.train_batch_size=2 \
-  trainer.policy_mini_batch_size=2 \
-  trainer.micro_forward_batch_size_per_gpu=2 \
-  trainer.micro_train_batch_size_per_gpu=2 \
+  trainer.train_batch_size=$BATCH_SIZE \
+  trainer.policy_mini_batch_size=$BATCH_SIZE \
+  trainer.micro_forward_batch_size_per_gpu=1 \
+  trainer.micro_train_batch_size_per_gpu=1 \
   trainer.dump_data_batch=true \
-  trainer.ckpt_interval=100 \
+  trainer.export_path="$CKPT_PATH/exported_model/" \
+  trainer.hf_save_interval=5 \
+  trainer.ckpt_interval=5 \
   trainer.max_prompt_length=4096 \
-  generator.sampling_params.max_generate_length=2048 \
+  generator.sampling_params.max_generate_length=$MAX_LENGTH \
+  generator.sampling_params.temperature=1.0 \
   generator.max_input_length=14000 \
   generator.max_num_batched_tokens=36000 \
   generator.max_turns=20 \
@@ -122,18 +144,20 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
   generator.http_endpoint_port=8080 \
   generator.weight_sync_backend=nccl \
   generator.async_engine=true \
-  generator.batched=true \
+  generator.batched=false \
   generator.n_samples_per_prompt=$N_ROLLOUTS \
   generator.gpu_memory_utilization=0.4 \
+  generator.enforce_eager=true \
+  trainer.step_wise_training=true \
   trainer.logger=$LOGGER \
   trainer.project_name=code_search \
   trainer.run_name=$RUN_NAME \
-  trainer.resume_mode=null \
+  trainer.resume_mode=latest \
   trainer.ckpt_path=$CKPT_PATH \
-  +generator.engine_init_kwargs="{enable_auto_tool_choice:true,tool_call_parser:hermes,max_model_len:16384}" \
-  +semantic_search.enabled=false \
+  trainer.max_ckpts_to_keep=3 \
+  +semantic_search.enabled=true \
   +semantic_search.device=cuda \
-  +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
+  +semantic_search.embedding_model="all-MiniLM-L6-v2 " \
   +semantic_search.reranker_model=null \
   +semantic_search.max_indices=50
 

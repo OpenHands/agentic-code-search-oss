@@ -624,7 +624,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             tracked_metrics[k] = sum(v) / len(v)
 
         generator_output: GeneratorOutput = {
-            # "trajectory_ids": out_trajectory_ids,
+            "trajectory_ids": out_trajectory_ids,
             "prompt_token_ids": prompt_token_ids,
             "response_ids": responses,
             "rewards": rewards,
@@ -632,7 +632,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
             "rollout_logprobs": None,
-            # "is_last_step": is_last_step,
+            "is_last_step": is_last_step,
             **tracked_metrics,
         }
 

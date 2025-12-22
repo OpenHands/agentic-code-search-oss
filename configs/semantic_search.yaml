@@ -1,5 +1,5 @@
 semantic_search:
-  enabled: false
+  enabled: true
   embedding_model: "jinaai/jina-code-embeddings-0.5b"
   reranker_model: null
   device: "cuda"
@@ -8,6 +8,6 @@ semantic_search:
   # Prompt configuration
   prompts:
     with_semantic_search:
-      system_prompt: "src/prompts/system_prompt_semantic.py"
+      system_prompt: "src/prompts/system_prompt.py"
     without_semantic_search:
-      system_prompt: "src/prompts/system_prompt_basic.py"
+      system_prompt: "src/prompts/system_prompt.py"
