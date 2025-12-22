@@ -18,6 +18,10 @@ dependencies = [
     "openhands-workspace",
     "vllm==0.11.0",
     "verifiers>=0.1.6.post0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-python>=0.23.0",
     "datasets>=4.0.0",
     "ipykernel>=7.1.0",
     "ipywidgets>=8.1.8",
@@ -72,6 +76,7 @@ openhands-workspace = { workspace = true }
 openhands-agent-server = { workspace = true }
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
+
 
 [tool.uv.workspace]
 members = [
