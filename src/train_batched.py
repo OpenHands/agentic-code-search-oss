@@ -425,10 +425,50 @@ def main(cfg: DictConfig) -> None:
     # Prepare environment variables
     env_vars = prepare_runtime_environment(cfg)
 
-    # Initialize Ray
+    # Define exclusions for Ray runtime environment
+    excludes = [
+        # Checkpoints and models
+        "ckpts/",
+        "*.ckpt",
+        "*.pth",
+        "*.pt",
+        "*.safetensors",
+        "*.bin",
+        
+        
+        # Logs
+        "logs/",
+        "*.log",
+        "*.out",
+        "*.err",
+        
+        # Caches and temp
+        ".cache/",
+        "__pycache__/",
+        "*.pyc",
+        ".pytest_cache/",
+        ".venv/",
+        "venv/",
+        "env/",
+        "ray_temp*/",
+        "ray_spill/",
+        
+        # Trajectories
+        "trajectories/",
+        
+        # Git
+        ".git/",
+        
+        # Hydra outputs
+        "outputs/",
+        "multirun/",
+    ]
+
+    # Initialize Ray with runtime environment
     ray.init(
         runtime_env={
-            "env_vars": env_vars
+            "env_vars": env_vars,
+            "excludes": excludes,  # Add this
         }
     )
 

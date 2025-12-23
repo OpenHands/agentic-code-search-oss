@@ -595,7 +595,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             for step_id in range(len(step_outputs)):
                 out_trajectory_id = copy.deepcopy(trajectory_ids[i])
                 out_trajectory_id.step = step_id
-                out_trajectory_ids.append(out_trajectory_id.instance_id)
+                out_trajectory_ids.append(out_trajectory_id)
                 is_last_step.append(step_id == len(step_outputs) - 1)
 
         if not len(responses):

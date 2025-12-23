@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=general
+#SBATCH --partition=preempt
 #SBATCH --mem=300Gb
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
@@ -51,9 +51,6 @@ export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
 
-# Memory optimization for PyTorch
-export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
-
 # Load .env if exists
 [ -f .env ] && . .env
 
@@ -75,7 +72,7 @@ N_ROLLOUTS="${N_ROLLOUTS:-4}"
 TRAIN_BATCH_SIZE=4
 MAX_LENGTH=2048
 export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
-export WANDB_PROJECT="code_search_batched"
+export WANDB_PROJECT="code_search"
 
 # Resource allocation
 NUM_GPUS=8
@@ -160,19 +157,19 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   data.val_data=["$DATA_PATH/validation.parquet"] \
   trainer.algorithm.advantage_estimator=grpo \
   trainer.policy.model.path=$MODEL \
-  trainer.placement.colocate_all=false \
+  trainer.placement.colocate_all=true \
   trainer.placement.colocate_policy_ref=true \
   trainer.strategy=fsdp2 \
   trainer.policy.fsdp_config.cpu_offload=true \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
-  trainer.fully_async.num_parallel_generation_workers=8 \
-  trainer.placement.policy_num_gpus_per_node=$NUM_TRAINING_ENGINES \
-  trainer.placement.ref_num_gpus_per_node=$NUM_TRAINING_ENGINES \
+  trainer.fully_async.num_parallel_generation_workers=2 \
+  trainer.placement.policy_num_gpus_per_node=8 \
+  trainer.placement.ref_num_gpus_per_node=8 \
   trainer.placement.policy_num_nodes=$NNODES \
   trainer.placement.ref_num_nodes=$NNODES \
   trainer.policy.sequence_parallel_size=1 \
-  generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
+  generator.num_inference_engines=2 \
   generator.inference_engine_tensor_parallel_size=$TP_SIZE \
   +generator.traj_dir=$CKPT_PATH/trajectories/ \
   +generator.engine_init_kwargs.enable_auto_tool_choice=true \
@@ -195,8 +192,8 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=$MAX_LENGTH \
   generator.sampling_params.temperature=1.0 \
-  generator.max_input_length=14000 \
-  generator.max_num_batched_tokens=36000 \
+  generator.max_input_length=12000 \
+  generator.max_num_batched_tokens=24000 \
   generator.max_turns=20 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=False \
@@ -209,7 +206,7 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   generator.async_engine=true \
   generator.batched=false \
   generator.n_samples_per_prompt=$N_ROLLOUTS \
-  generator.gpu_memory_utilization=0.4 \
+  generator.gpu_memory_utilization=0.6 \
   generator.enforce_eager=true \
   trainer.step_wise_training=true \
   trainer.logger=$LOGGER \

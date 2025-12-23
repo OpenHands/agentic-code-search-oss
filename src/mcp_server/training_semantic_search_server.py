@@ -118,106 +118,41 @@ class FileLock:
 
 def ensure_index_exists(repo_commit_hash: str, workspace_path: str) -> tuple[SemanticSearch, str]:
     """
-    Ensure the semantic search index exists with robust file locking.
+    Load pre-existing index - DO NOT create new indices during training.
     
-    This prevents multiple workers from corrupting the ChromaDB database
-    by ensuring only one worker can initialize the index at a time.
-    
-    Args:
-        repo_commit_hash: Hash identifying the repository and commit
-        workspace_path: Path to the repository workspace to index
-        
-    Returns:
-        tuple of (SemanticSearch instance, index directory path)
+    This function should only be called during training when indices
+    have been pre-created in the indexing phase.
     """
     index_dir = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
-    index_dir.mkdir(parents=True, exist_ok=True)
-    
-    lock_file = index_dir / ".init.lock"
     ready_file = index_dir / ".ready"
     worker_id = os.getpid()
     
-    # Fast path: if index is already ready, just load it
-    if ready_file.exists():
-        log(f"[Worker {worker_id}] Index already exists and is ready")
-        try:
-            index = SemanticSearch(
-                collection_name=f"code_{repo_commit_hash}",
-                persist_directory=str(index_dir),
-                # embedding_service=get_embedding_service(),
-                device="cpu",
-                num_threads=4,
-            )
-            log(f"[Worker {worker_id}] Successfully loaded existing index")
-            return index, str(index_dir)
-        except Exception as e:
-            log(f"[Worker {worker_id}] Failed to load existing index: {e}, will recreate")
-            ready_file.unlink(missing_ok=True)
-            # Fall through to creation logic
+    # Check if index exists
+    if not ready_file.exists():
+        error_msg = (
+            f"[Worker {worker_id}] Index not found for {repo_commit_hash}. "
+            f"Expected at: {index_dir}\n"
+            f"This should have been created during the pre-indexing phase. "
+            f"Please run the batched indexing script to create indices first."
+        )
+        log(error_msg)
+        raise FileNotFoundError(error_msg)
     
-    # Slow path: need to create the index
-    log(f"[Worker {worker_id}] Acquiring lock to initialize index...")
-    lock = FileLock(lock_file)
-    
+    # Load existing index (read-only)
+    log(f"[Worker {worker_id}] Loading pre-existing index from {index_dir}")
     try:
-        with lock:
-            log(f"[Worker {worker_id}] Lock acquired")
-            
-            # Double-check: another worker might have created it while we waited
-            if ready_file.exists():
-                log(f"[Worker {worker_id}] Another worker created the index while we waited")
-                index = SemanticSearch(
-                    collection_name=f"code_{repo_commit_hash}",
-                    persist_directory=str(index_dir),
-                    # embedding_service=get_embedding_service(),
-                    device="cpu",
-                    num_threads=4,
-                )
-                return index, str(index_dir)
-            
-            # We need to create the index
-            log(f"[Worker {worker_id}] Creating new index for {repo_commit_hash}")
-            
-            import shutil
-            for db_file in ["chroma.sqlite3", "chroma.sqlite3-shm", "chroma.sqlite3-wal"]:
-                db_path = index_dir / db_file
-                if db_path.exists():
-                    log(f"[Worker {worker_id}] Removing {db_file}")
-                    db_path.unlink()
-            
-            # Also remove any collections directory
-            collections_dir = index_dir / "collections"
-            if collections_dir.exists():
-                log(f"[Worker {worker_id}] Removing collections directory")
-                shutil.rmtree(collections_dir, ignore_errors=True)
-            
-            # Create the index
-            index = SemanticSearch(
-                collection_name=f"code_{repo_commit_hash}",
-                persist_directory=str(index_dir),
-                # embedding_service=get_embedding_service(),
-                device="cpu",
-                num_threads=4,
-            )
-            
-            # Index the workspace
-            log(f"[Worker {worker_id}] Indexing workspace: {workspace_path}")
-            index.index_code_files(workspace_path)
-            
-            # Mark as ready
-            ready_file.touch()
-            log(f"[Worker {worker_id}] Index created and marked as ready")
-            
-            return index, str(index_dir)
-            
+        index = SemanticSearch(
+            collection_name=f"code_{repo_commit_hash}",
+            persist_directory=str(index_dir),
+            device="cpu",
+            num_threads=4,
+        )
+        log(f"[Worker {worker_id}] Successfully loaded index")
+        return index, str(index_dir)
     except Exception as e:
-        log(f"[Worker {worker_id}] Error during index creation: {e}")
-        import traceback
-        log(traceback.format_exc())
-        # Clean up the ready file if something went wrong
-        ready_file.unlink(missing_ok=True)
+        log(f"[Worker {worker_id}] Failed to load index: {e}")
         raise
-
+    
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
