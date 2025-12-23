@@ -93,7 +93,7 @@ uv run --isolated -m src.train \
   generator.n_samples_per_prompt=${N_ROLLOUTS} \
   generator.gpu_memory_utilization=0.75 \
   generator.enforce_eager=false \
-  +trainer.step_wise_training=true \
+  trainer.step_wise_training=true \
   trainer.logger="wandb" \
   trainer.project_name="code_search" \
   trainer.run_name=${RUN_NAME} \
