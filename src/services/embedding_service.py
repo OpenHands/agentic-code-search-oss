@@ -1,17 +1,27 @@
 """
-Persistent embedding service for efficient training.
+Two-phase embedding service for efficient indexing and retrieval.
 
-This service runs as a Ray actor, loads models once, and serves all training workers.
-Avoids reloading 2.2GB of models on every episode.
+PHASE 1 - INDEXING (GPU):
+- Use GPU for fast embedding during index creation
+- No training happens during this phase
+- Maximum GPU utilization for indexing speed
 
-Features:
-- LRU cache with configurable size limit (prevents disk space issues)
-- Automatic eviction of least-recently-used indices
-- Disk usage monitoring
+PHASE 2 - RETRIEVAL (CPU):  
+- Move models to CPU after indexing complete
+- Free GPU for training
+- Handle search queries on CPU (no GPU contention)
+
+Workflow:
+1. enter_indexing_phase() -> Load models on GPU
+2. Create indices (GPU-accelerated)
+3. enter_retrieval_phase() -> Move models to CPU
+4. Training starts (GPU free for training)
+5. Search queries (CPU-based, no contention)
 """
 
 import ray
 import shutil
+import gc
 from pathlib import Path
 from typing import List, Dict, Optional
 from collections import OrderedDict
@@ -21,50 +31,240 @@ from sentence_transformers import SentenceTransformer, CrossEncoder
 from src.tools.semantic_search import SemanticSearch
 
 
-@ray.remote(num_cpus=2, num_gpus=0.1)  # Adjust GPU allocation as needed
+@ray.remote(num_cpus=4, num_gpus=1)  # Allocate 1 GPU for indexing phase
 class EmbeddingService:
     """
-    Persistent Ray actor that handles all embedding operations.
-
-    Models are loaded once and reused across all training episodes.
+    Two-phase embedding service for efficient indexing and retrieval.
+    
+    Phase 1 - INDEXING (GPU):
+    - Load models on GPU for fast embedding
+    - Create indices using GPU acceleration
+    - No training happens during this phase
+    
+    Phase 2 - RETRIEVAL (CPU):
+    - Move models to CPU after indexing
+    - Free GPU for training
+    - Handle search queries on CPU
+    
+    Key features:
+    - GPU-accelerated indexing
+    - CPU-based retrieval (no GPU contention)
+    - Phase-aware model placement
+    - LRU cache for indices
+    - Batch-aware cleanup
     """
 
     def __init__(
         self,
         embedding_model: str = "jinaai/jina-code-embeddings-0.5b",
         reranker_model: str = "jinaai/jina-reranker-v3",
-        device: str = "cpu",  # or "cuda" if GPU available
         cache_dir: Optional[str] = None,
-        max_indices: int = 50,  # Max number of indices to keep (LRU eviction)
-        max_cache_size_gb: Optional[float] = None,  # Max total disk space (GB)
+        max_indices: int = 20,
+        max_cache_size_gb: Optional[float] = None,
     ):
         """
-        Initialize embedding service with persistent models.
+        Initialize embedding service.
 
         Args:
             max_indices: Maximum number of indices to keep loaded (LRU eviction)
             max_cache_size_gb: Maximum total disk space for cache (GB), None = unlimited
         """
-        print(f"[EmbeddingService] Loading models on {device}...")
+        print(f"[EmbeddingService] Initializing two-phase service...")
 
         self.embedding_model_name = embedding_model
         self.reranker_model_name = reranker_model
-        self.device = device
         self.cache_dir = cache_dir or str(Path.home() / ".cache" / "swebench_indices")
         self.max_indices = max_indices
         self.max_cache_size_gb = max_cache_size_gb
 
-        # Load models ONCE (this is the expensive part)
-        self.embedder = SentenceTransformer(embedding_model, device=device)
-        self.reranker = CrossEncoder(reranker_model, device=device) if reranker_model else None
+        # Track current phase and device
+        self.current_phase = None  # 'indexing', 'retrieval', or None
+        self.current_device = None
+        
+        # Models start unloaded
+        self.embedder = None
+        self.reranker = None
+        self.models_loaded = False
 
-        # LRU cache for loaded indices (OrderedDict maintains insertion order)
+        # LRU cache for loaded indices
         self.indices_cache = OrderedDict()
 
-        print(f"[EmbeddingService] Models loaded successfully!")
+        print(f"[EmbeddingService] Initialized")
         print(f"[EmbeddingService] LRU cache: max {max_indices} indices")
         if max_cache_size_gb:
             print(f"[EmbeddingService] Disk limit: {max_cache_size_gb:.1f} GB")
+    
+    def enter_indexing_phase(self):
+        """
+        Enter indexing phase: Load models on GPU for fast embedding.
+        
+        Call this BEFORE indexing a new batch.
+        No training should happen during this phase.
+        """
+        if self.current_phase == 'indexing':
+            print("[EmbeddingService] Already in indexing phase")
+            return
+        
+        print("\n" + "="*80)
+        print("[EmbeddingService] ⚡ ENTERING INDEXING PHASE (GPU)")
+        print("="*80)
+        
+        import torch
+        
+        # Unload if already loaded on different device
+        if self.models_loaded:
+            self._unload_models()
+        
+        # Check GPU availability
+        if not torch.cuda.is_available():
+            print("[EmbeddingService] WARNING: No GPU available, using CPU")
+            device = "cpu"
+            torch.set_num_threads(8)
+        else:
+            device = "cuda"
+            print(f"[EmbeddingService] Using GPU: {torch.cuda.get_device_name(0)}")
+        
+        # Load models on GPU
+        print(f"[EmbeddingService] Loading models on {device}...")
+        self.embedder = SentenceTransformer(
+            self.embedding_model_name, 
+            device=device
+        )
+        
+        if self.reranker_model_name:
+            self.reranker = CrossEncoder(
+                self.reranker_model_name, 
+                device=device
+            )
+        else:
+            self.reranker = None
+        
+        self.models_loaded = True
+        self.current_device = device
+        self.current_phase = 'indexing'
+        
+        if device == "cuda":
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            print(f"[EmbeddingService] GPU memory after loading: {allocated:.2f}GB")
+        
+        print(f"[EmbeddingService] ✓ Models loaded on {device} for indexing")
+        print("="*80 + "\n")
+    
+    def enter_retrieval_phase(self):
+        """
+        Enter retrieval phase: Move models to CPU to free GPU for training.
+        
+        Call this AFTER indexing is complete, BEFORE training starts.
+        Models will be moved from GPU to CPU.
+        """
+        if self.current_phase == 'retrieval':
+            print("[EmbeddingService] Already in retrieval phase")
+            return
+        
+        print("\n" + "="*80)
+        print("[EmbeddingService] 🔄 ENTERING RETRIEVAL PHASE (CPU)")
+        print("="*80)
+        
+        import torch
+        
+        if not self.models_loaded:
+            print("[EmbeddingService] Loading models on CPU...")
+            # Load directly on CPU
+            torch.set_num_threads(4)
+            self.embedder = SentenceTransformer(
+                self.embedding_model_name, 
+                device="cpu"
+            )
+            if self.reranker_model_name:
+                self.reranker = CrossEncoder(
+                    self.reranker_model_name, 
+                    device="cpu"
+                )
+        else:
+            # Move existing models from GPU to CPU
+            print(f"[EmbeddingService] Moving models from {self.current_device} to CPU...")
+            
+            self.embedder.to("cpu")
+            if self.reranker:
+                self.reranker.model.to("cpu")
+            
+            # Clear GPU cache
+            if torch.cuda.is_available():
+                before_clear = torch.cuda.memory_allocated() / 1024**3
+                torch.cuda.empty_cache()
+                after_clear = torch.cuda.memory_allocated() / 1024**3
+                freed = before_clear - after_clear
+                print(f"[EmbeddingService] GPU memory freed: {freed:.2f}GB")
+        
+        self.models_loaded = True
+        self.current_device = "cpu"
+        self.current_phase = 'retrieval'
+        
+        # Also move any loaded indices to CPU
+        for index_hash, index in self.indices_cache.items():
+            if hasattr(index, 'embedder') and index.embedder is not None:
+                index.embedder = self.embedder
+            if hasattr(index, 'reranker') and index.reranker is not None:
+                index.reranker = self.reranker
+        
+        print(f"[EmbeddingService] ✓ Models on CPU for retrieval (GPU freed for training)")
+        print("="*80 + "\n")
+    
+    def _unload_models(self):
+        """Completely unload models from memory."""
+        import torch
+        
+        print(f"[EmbeddingService] Unloading models from {self.current_device}...")
+        
+        del self.embedder
+        del self.reranker
+        
+        self.embedder = None
+        self.reranker = None
+        self.models_loaded = False
+        self.current_device = None
+        
+        # Force garbage collection
+        gc.collect()
+        if torch.cuda.is_available():
+            torch.cuda.empty_cache()
+        
+        print("[EmbeddingService] Models unloaded")
+    
+    def offload_for_training(self):
+        """
+        Prepare for training: Move to CPU if needed, clear GPU cache.
+        
+        This is equivalent to enter_retrieval_phase() but more explicit.
+        Call this RIGHT BEFORE training starts.
+        """
+        print("\n[EmbeddingService] 🎯 PREPARING FOR TRAINING")
+        self.enter_retrieval_phase()
+        
+        import torch
+        if torch.cuda.is_available():
+            # Extra cleanup
+            gc.collect()
+            torch.cuda.empty_cache()
+            
+            # Report GPU memory
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            print(f"[EmbeddingService] GPU memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+            print("[EmbeddingService] ✓ GPU ready for training\n")
+    
+    def ensure_models_loaded(self):
+        """
+        Ensure models are loaded on appropriate device.
+        
+        If no phase is set, defaults to retrieval (CPU).
+        """
+        if not self.models_loaded:
+            if self.current_phase == 'indexing':
+                self.enter_indexing_phase()
+            else:
+                # Default to retrieval phase (CPU)
+                self.enter_retrieval_phase()
 
     def _get_dir_size_mb(self, path: Path) -> float:
         """Get directory size in MB."""
@@ -94,8 +294,8 @@ class EmbeddingService:
         # Remove from disk
         persist_dir = Path(self.cache_dir) / lru_hash
         if persist_dir.exists():
-            shutil.rmtree(persist_dir)
             size_mb = self._get_dir_size_mb(persist_dir)
+            shutil.rmtree(persist_dir)
             print(f"[EmbeddingService] Evicted LRU index {lru_hash} ({size_mb:.1f} MB)")
 
     def _enforce_cache_limits(self):
@@ -110,10 +310,54 @@ class EmbeddingService:
                 self._evict_lru_index()
                 if not self.indices_cache:
                     break  # Safety: don't infinite loop
+    
+    def clear_all_indices(self):
+        """Clear ALL loaded indices from memory (not disk)."""
+        self.indices_cache.clear()
+        gc.collect()
+        print(f"[EmbeddingService] Cleared all loaded indices from memory")
+    
+    def cleanup_batch_indices(self, repo_commit_hashes: List[str]):
+        """
+        Clean up specific indices for a batch.
+        
+        Args:
+            repo_commit_hashes: List of repo-commit hashes to clean up
+        """
+        cleaned_count = 0
+        freed_mb = 0.0
+        
+        for repo_hash in repo_commit_hashes:
+            # Remove from memory cache
+            if repo_hash in self.indices_cache:
+                del self.indices_cache[repo_hash]
+                cleaned_count += 1
+            
+            # Remove from disk
+            persist_dir = Path(self.cache_dir) / repo_hash
+            if persist_dir.exists():
+                size_mb = self._get_dir_size_mb(persist_dir)
+                shutil.rmtree(persist_dir)
+                freed_mb += size_mb
+        
+        # Force garbage collection
+        gc.collect()
+        
+        print(
+            f"[EmbeddingService] Cleaned batch: "
+            f"{cleaned_count} indices, {freed_mb:.1f} MB freed"
+        )
 
     def get_or_load_index(self, repo_name: str, commit: str) -> SemanticSearch:
-        """Get or load index for a specific repo+commit with LRU caching."""
-        from src.mcp_server.semantic_search_server import get_repo_commit_hash
+        """
+        Get or load index for a specific repo+commit with LRU caching.
+        
+        Uses current device (GPU for indexing, CPU for retrieval).
+        """
+        # Ensure models are loaded on appropriate device
+        self.ensure_models_loaded()
+        
+        from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
 
         repo_commit_hash = get_repo_commit_hash(repo_name, commit)
 
@@ -129,7 +373,7 @@ class EmbeddingService:
         if not persist_dir.exists():
             raise ValueError(
                 f"Index not found for {repo_name}@{commit[:8]}. "
-                f"Run pre-indexing first: python preindex_swebench.py --min-frequency 3"
+                f"Run pre-indexing first: python scripts/clone_and_index_repos.py"
             )
 
         # Enforce cache limits BEFORE loading new index
@@ -141,6 +385,8 @@ class EmbeddingService:
             persist_directory=str(persist_dir),
             embedding_model_name=self.embedding_model_name,
             reranker_model_name=self.reranker_model_name,
+            device=self.current_device,  # Use current device
+            num_threads=4 if self.current_device == "cpu" else 1,
         )
 
         # Reuse our already-loaded models instead of loading new ones
@@ -149,7 +395,7 @@ class EmbeddingService:
 
         # Add to cache (at end = most recently used)
         self.indices_cache[repo_commit_hash] = index
-        print(f"[EmbeddingService] Loaded index for {repo_name}@{commit[:8]} (cache: {len(self.indices_cache)}/{self.max_indices})")
+        print(f"[EmbeddingService] Loaded index for {repo_name}@{commit[:8]} on {self.current_device} (cache: {len(self.indices_cache)}/{self.max_indices})")
 
         return self.indices_cache[repo_commit_hash]
 
@@ -161,23 +407,20 @@ class EmbeddingService:
         n_results: int = 10,
     ) -> List[Dict]:
         """
-        Perform semantic search using pre-loaded models and index.
-
-        This is FAST because:
-        1. Models already loaded (no 2.2GB reload)
-        2. Code embeddings pre-computed (just query embedding + similarity)
-        3. Reranker already loaded (no reload)
+        Perform semantic search using current device (CPU during training).
         """
         index = self.get_or_load_index(repo_name, commit)
-        results = index.search(query, n_results=n_results)
+        results = index.search(query, n_results=n_results, use_reranker=False)
         return results
 
     def embed_query(self, query: str) -> np.ndarray:
-        """Embed a single query (useful for caching)."""
+        """Embed a single query on current device."""
+        self.ensure_models_loaded()
         return self.embedder.encode(query, normalize_embeddings=True, convert_to_numpy=True)
 
     def embed_batch(self, queries: List[str]) -> np.ndarray:
-        """Embed multiple queries efficiently."""
+        """Embed multiple queries efficiently on current device."""
+        self.ensure_models_loaded()
         return self.embedder.encode(
             queries,
             normalize_embeddings=True,
@@ -194,25 +437,25 @@ class EmbeddingService:
             "indices": list(self.indices_cache.keys()),
             "total_cache_size_gb": round(total_cache_gb, 2),
             "max_cache_size_gb": self.max_cache_size_gb,
-            "device": self.device,
+            "current_phase": self.current_phase,
+            "current_device": self.current_device,
             "embedding_model": self.embedding_model_name,
             "reranker_model": self.reranker_model_name,
+            "models_loaded": self.models_loaded,
         }
 
 
 def get_embedding_service(
-    device: str = "cpu",
-    max_indices: int = 50,
+    max_indices: int = 20,
     max_cache_size_gb: Optional[float] = None,
 ) -> ray.ObjectRef:
     """
-    Get or create the shared embedding service with LRU caching.
+    Get or create the shared two-phase embedding service.
 
     Call this once at training start to initialize the service.
     All workers will share this single instance.
 
     Args:
-        device: Device for embeddings ('cpu' or 'cuda')
         max_indices: Maximum number of indices to keep (LRU eviction)
         max_cache_size_gb: Maximum total disk space for cache (GB), None = unlimited
     """
@@ -222,9 +465,8 @@ def get_embedding_service(
         print("[EmbeddingService] Using existing service")
     except ValueError:
         # Create new service
-        print(f"[EmbeddingService] Creating new service on {device}")
+        print(f"[EmbeddingService] Creating new two-phase service")
         service = EmbeddingService.options(name="embedding_service").remote(
-            device=device,
             max_indices=max_indices,
             max_cache_size_gb=max_cache_size_gb,
         )

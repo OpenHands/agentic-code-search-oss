@@ -4,11 +4,21 @@
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
 #SBATCH -t 2-00:00:00
-#SBATCH --job-name=rl_qwen3_4b
+#SBATCH --job-name=rl_qwen3_4b_batched
 #SBATCH --error=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
 #SBATCH --output=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
 #SBATCH --nodes=1
 #SBATCH --ntasks-per-node=1
+
+# ============================================================================
+# Batched Training Script with Memory-Optimized Indexing
+# ============================================================================
+# This script trains in batches:
+# 1. Index N repos (e.g., 15)
+# 2. Train on those repos
+# 3. Clean up indices
+# 4. Move to next batch
+# ============================================================================
 
 # Cache Configuration
 export UV_CACHE_DIR="/data/user_data/sanidhyv/.cache/uv"
@@ -41,32 +51,43 @@ export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
 
+# Memory optimization for PyTorch
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True
+
 # Load .env if exists
 [ -f .env ] && . .env
 
+# ============================================================================
 # Configuration
+# ============================================================================
 MODEL="Qwen/Qwen3-4B"
 MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
-CKPT_PATH="/data/user_data/sanidhyv/agentic-code-search-oss/ckpts/code_search_${MODEL_ALIAS}"
+CKPT_PATH="/data/user_data/sanidhyv/agentic-code-search-oss/ckpts/code_search_${MODEL_ALIAS}_batched"
+CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"
+
+# Batched indexing configuration
+BATCH_SIZE=15  # Number of repos per batch
+REPOS_DIR="/data/user_data/sanidhyv/grep"  # Where repos are cloned
+
+# Training configuration
 N_ROLLOUTS="${N_ROLLOUTS:-4}"
-BATCH_SIZE=4  # Keep smaller for memory constraints with semantic search
+TRAIN_BATCH_SIZE=4
 MAX_LENGTH=2048
 export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
-export WANDB_PROJECT="code_search"
+export WANDB_PROJECT="code_search_batched"
 
-# Resource allocation - adjusted for semantic search memory requirements
+# Resource allocation
 NUM_GPUS=8
 NNODES=1
-# Split GPUs: half for inference, half for training (like run_async_training.sh)
 HALF_NUM_GPUS=$((NUM_GPUS / 2))
-NUM_INFERENCE_ENGINES=4  # Half of GPUs for inference
-NUM_TRAINING_ENGINES=4   # Half of GPUs for training
+NUM_INFERENCE_ENGINES=4  # Half for inference
+NUM_TRAINING_ENGINES=4   # Half for training
 TP_SIZE=1  
 LOGGER=wandb
-RUN_NAME="code_search_${MODEL_ALIAS}_semantic"
+RUN_NAME="code_search_${MODEL_ALIAS}_batched_b${BATCH_SIZE}"
 
-mkdir -p $CKPT_PATH $CKPT_PATH/trajectories logs
+mkdir -p $CKPT_PATH $CKPT_PATH/trajectories logs $CACHE_DIR
 export RAY_object_store_memory=$((50 * 1024 * 1024 * 1024))  # 50GB
 export RAY_memory_monitor_refresh_ms=0  
 export RAY_object_spilling_config='{"type":"filesystem","params":{"directory_path":"/data/user_data/sanidhyv/ray_spill"}}'
@@ -74,13 +95,51 @@ export HYDRA_FULL_ERROR=1
 
 mkdir -p /data/user_data/sanidhyv/ray_spill
 
-echo "Starting RL Training with Semantic Search"
-echo "Model: $MODEL"
-echo "N Rollouts: $N_ROLLOUTS"
-echo "Batch Size: $BATCH_SIZE"
-echo "======================================"
+# ============================================================================
+# Pre-Index First Batch (GPU)
+# ============================================================================
+echo "=================================================="
+echo "Pre-indexing first batch on GPU"
+echo "=================================================="
+echo "This uses GPU for fast embedding generation"
+echo "Training will use CPU for retrieval (no GPU contention)"
+echo "=================================================="
 
-# Cleanup
+# Clone repos if needed
+if [ ! -d "$REPOS_DIR" ] || [ -z "$(ls -A $REPOS_DIR)" ]; then
+    echo "Cloning repos..."
+    uv run python scripts/clone_and_index_repos.py \
+        --output-dir "$REPOS_DIR" \
+        --cache-dir "$CACHE_DIR" \
+        --dataset "SWE-Gym/SWE-Gym" \
+        --split train \
+        --max-repos "$BATCH_SIZE" \
+        --skip-indexing  # Only clone, indexing done separately
+fi
+
+# Index first batch on GPU
+echo "Indexing batch 0 on GPU..."
+uv run python scripts/index_batch.py \
+    --batch-idx 0 \
+    --batch-size "$BATCH_SIZE" \
+    --cache-dir "$CACHE_DIR" \
+    --repos-dir "$REPOS_DIR"
+
+echo "First batch indexed successfully!"
+
+# ============================================================================
+# Training Loop with Batched Indexing
+# ============================================================================
+echo "=================================================="
+echo "Starting Batched Training"
+echo "=================================================="
+echo "Model: $MODEL"
+echo "Batch Size: $BATCH_SIZE repos/batch"
+echo "N Rollouts: $N_ROLLOUTS"
+echo "Train Batch Size: $TRAIN_BATCH_SIZE"
+echo "=================================================="
+
+# Cleanup function
 cleanup() {
     python3 -c "import ray; ray.shutdown() if ray.is_initialized() else None" 2>/dev/null
     rm -rf "$TMPDIR"/* 2>/dev/null || true
@@ -89,10 +148,14 @@ trap cleanup EXIT INT TERM
 
 set -x
 
-# Launch training 
-CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
+# Launch training with batched indexing
+CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   --config-name=ppo_base_config \
   +run_async_trainer=true \
+  +batched_indexing.enabled=true \
+  +batched_indexing.batch_size=$BATCH_SIZE \
+  +batched_indexing.cache_dir=$CACHE_DIR \
+  +batched_indexing.repos_dir=$REPOS_DIR \
   data.train_data=["$DATA_PATH/train.parquet"] \
   data.val_data=["$DATA_PATH/validation.parquet"] \
   trainer.algorithm.advantage_estimator=grpo \
@@ -121,8 +184,8 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
   trainer.eval_before_train=false \
   trainer.eval_interval=100 \
   trainer.update_epochs_per_batch=1 \
-  trainer.train_batch_size=$BATCH_SIZE \
-  trainer.policy_mini_batch_size=$BATCH_SIZE \
+  trainer.train_batch_size=$TRAIN_BATCH_SIZE \
+  trainer.policy_mini_batch_size=$TRAIN_BATCH_SIZE \
   trainer.micro_forward_batch_size_per_gpu=1 \
   trainer.micro_train_batch_size_per_gpu=1 \
   trainer.dump_data_batch=true \
@@ -150,43 +213,27 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train.py \
   generator.enforce_eager=true \
   trainer.step_wise_training=true \
   trainer.logger=$LOGGER \
-  trainer.project_name=code_search \
+  trainer.project_name=$WANDB_PROJECT \
   trainer.run_name=$RUN_NAME \
   trainer.resume_mode=latest \
   trainer.ckpt_path=$CKPT_PATH \
   trainer.max_ckpts_to_keep=3 \
   +semantic_search.enabled=true \
-  +semantic_search.device=cuda \
-  +semantic_search.embedding_model="all-MiniLM-L6-v2 " \
+  +semantic_search.device=cpu \
+  +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
   +semantic_search.reranker_model=null \
-  +semantic_search.max_indices=50
+  +semantic_search.max_indices=15
 
-CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"
-MAX_AGE_DAYS=7
-# Clean up temporary files from training/eval
+# ============================================================================
+# Cleanup
+# ============================================================================
+echo "=================================================="
+echo "Training Complete - Cleaning Up"
+echo "=================================================="
+
+# Clean up temporary files
 echo "Cleaning up temporary files..."
-# Remove old workspaces (testbed_*)
-echo "Removing testbed workspaces..."
 find /data/user_data/sanidhyv/tmp -maxdepth 1 -type d -name "testbed_*" -mtime +1 -exec rm -rf {} + 2>/dev/null
-echo "Testbed cleanup complete"
-
-# Remove old embedding caches (keep recent ones for reuse)
-echo "Removing old embedding caches (>1 days)..."
-find /data/user_data/sanidhyv/tmp/embedding_cache -maxdepth 1 -type d -mtime +1 -exec rm -rf {} + 2>/dev/null
-echo "Embedding cache cleanup complete"
-
-# Remove orphaned lock files
-echo "Removing orphaned lock files..."
-find /data/user_data/sanidhyv/tmp/embedding_cache -name ".lock" -mtime +1 -delete 2>/dev/null
-echo "Lock file cleanup complete"
-
-# Clean Ray temp files
-echo "Cleaning Ray temp files..."
-find /data/user_data/sanidhyv/ray_temp_grep -type f -name "*.log" -mtime +3 -delete 2>/dev/null
-echo "Ray cleanup complete"
-
 echo "Cleanup complete!"
-echo "Cleaning embedding cache older than ${MAX_AGE_DAYS} days..."
-find "$CACHE_DIR" -type d -mtime +${MAX_AGE_DAYS} -exec rm -rf {} +
-echo "Done!"
+
 exit $?
