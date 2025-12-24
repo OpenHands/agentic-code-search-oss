@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --partition=preempt
+#SBATCH --partition=general
 #SBATCH --mem=300Gb
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
@@ -102,27 +102,27 @@ echo "This uses GPU for fast embedding generation"
 echo "Training will use CPU for retrieval (no GPU contention)"
 echo "=================================================="
 
-# Clone repos if needed
-if [ ! -d "$REPOS_DIR" ] || [ -z "$(ls -A $REPOS_DIR)" ]; then
-    echo "Cloning repos..."
-    uv run python scripts/clone_and_index_repos.py \
-        --output-dir "$REPOS_DIR" \
-        --cache-dir "$CACHE_DIR" \
-        --dataset "SWE-Gym/SWE-Gym" \
-        --split train \
-        --max-repos "$BATCH_SIZE" \
-        --skip-indexing  # Only clone, indexing done separately
-fi
+# # Clone repos if needed
+# if [ ! -d "$REPOS_DIR" ] || [ -z "$(ls -A $REPOS_DIR)" ]; then
+#     echo "Cloning repos..."
+#     uv run python scripts/clone_and_index_repos.py \
+#         --output-dir "$REPOS_DIR" \
+#         --cache-dir "$CACHE_DIR" \
+#         --dataset "SWE-Gym/SWE-Gym" \
+#         --split train \
+#         --max-repos "$BATCH_SIZE" \
+#         --skip-indexing  # Only clone, indexing done separately
+# fi
 
-# Index first batch on GPU
-echo "Indexing batch 0 on GPU..."
-uv run python scripts/index_batch.py \
-    --batch-idx 0 \
-    --batch-size "$BATCH_SIZE" \
-    --cache-dir "$CACHE_DIR" \
-    --repos-dir "$REPOS_DIR"
+# # Index first batch on GPU
+# echo "Indexing batch 0 on GPU..."
+# uv run python scripts/index_batch.py \
+#     --batch-idx 0 \
+#     --batch-size "$BATCH_SIZE" \
+#     --cache-dir "$CACHE_DIR" \
+#     --repos-dir "$REPOS_DIR"
 
-echo "First batch indexed successfully!"
+# echo "First batch indexed successfully!"
 
 # ============================================================================
 # Training Loop with Batched Indexing
@@ -163,13 +163,13 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   trainer.policy.fsdp_config.cpu_offload=true \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
-  trainer.fully_async.num_parallel_generation_workers=2 \
-  trainer.placement.policy_num_gpus_per_node=8 \
-  trainer.placement.ref_num_gpus_per_node=8 \
+  trainer.fully_async.num_parallel_generation_workers=4 \
+  trainer.placement.policy_num_gpus_per_node=$NUM_TRAINING_ENGINES \
+  trainer.placement.ref_num_gpus_per_node=$NUM_TRAINING_ENGINES \
   trainer.placement.policy_num_nodes=$NNODES \
   trainer.placement.ref_num_nodes=$NNODES \
   trainer.policy.sequence_parallel_size=1 \
-  generator.num_inference_engines=2 \
+  generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
   generator.inference_engine_tensor_parallel_size=$TP_SIZE \
   +generator.traj_dir=$CKPT_PATH/trajectories/ \
   +generator.engine_init_kwargs.enable_auto_tool_choice=true \
@@ -207,7 +207,7 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   generator.batched=false \
   generator.n_samples_per_prompt=$N_ROLLOUTS \
   generator.gpu_memory_utilization=0.6 \
-  generator.enforce_eager=true \
+  generator.enforce_eager=false \
   trainer.step_wise_training=true \
   trainer.logger=$LOGGER \
   trainer.project_name=$WANDB_PROJECT \

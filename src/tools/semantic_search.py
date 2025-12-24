@@ -33,6 +33,9 @@ class SemanticSearch:
         device: str = "cpu",  # Default to CPU
         max_chunk_size: int = 512,
         num_threads: int = 8, 
+        read_only: bool = False,
+        embedder: Optional[SentenceTransformer] = None,  # ADD THIS
+        reranker: Optional[CrossEncoder] = None,  # ADD THIS
     ):
         self.embedding_model_name = embedding_model_name
         self.reranker_model_name = reranker_model_name
@@ -47,36 +50,54 @@ class SemanticSearch:
             torch.set_num_threads(num_threads)
 
         # Initialize models
-        self.embedder = SentenceTransformer(embedding_model_name, device=device)
-        
-        if device == "cpu":
-            self.embedder.to("cpu")
-        
-        if reranker_model_name:
+        if embedder is not None:
+            print(f"[SemanticSearch] Using pre-loaded embedder")
+            self.embedder = embedder
+            self.device = embedder.device
+        else:
+            print(f"[SemanticSearch] Loading embedder: {embedding_model_name} on {device}")
+            self.embedder = SentenceTransformer(embedding_model_name, device=device)
+            self.device = torch.device(device)
+    
+        # Use provided reranker or create new one
+        if reranker is not None:
+            print(f"[SemanticSearch] Using pre-loaded reranker")
+            self.reranker = reranker
+        elif reranker_model_name:
+            print(f"[SemanticSearch] Loading reranker: {reranker_model_name}")
             self.reranker = CrossEncoder(reranker_model_name, device=device)
-            if device == "cpu":
-                import torch
-                self.reranker.model.to("cpu")
         else:
             self.reranker = None
+
 
         # Initialize ChromaDB PersistentClient
         self.client = chromadb.PersistentClient(
             path=persist_directory,
             settings=Settings(anonymized_telemetry=False),
         )
-
         # Get or create collection
-        self.collection = self.client.get_or_create_collection(
-            name=collection_name,
-            metadata={"hnsw:space": "cosine"},
-        )
+        if read_only:
+            # Training mode: ONLY get existing collection
+            try:
+                self.collection = self.client.get_collection(name=collection_name)
+            except Exception as e:
+                raise ValueError(
+                    f"Collection {collection_name} not found. "
+                    f"Index must be pre-created before training."
+                ) from e
+        else:
+            # Indexing mode: Create if needed
+            self.collection = self.client.get_or_create_collection(
+                name=collection_name,
+                metadata={"hnsw:space": "cosine"},
+            )
+
 
     def index_code_files(
         self,
         repo_path: str,
         file_extensions: Optional[List[str]] = None,
-        batch_size: int = 32,
+        batch_size: int = 128,
         exclude_patterns: Optional[List[str]] = None,
     ) -> dict:
         """
@@ -496,7 +517,7 @@ def semantic_search(
     if stats["total_documents"] == 0 or rebuild_index:
         log(f"Indexing {repo_path}...")
         index.index_code_files(str(repo_path))
-    
+
     # Search
     results = index.search(query, n_results=n_results)
     

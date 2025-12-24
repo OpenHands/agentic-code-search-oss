@@ -117,41 +117,28 @@ class FileLock:
 
 
 def ensure_index_exists(repo_commit_hash: str, workspace_path: str) -> tuple[SemanticSearch, str]:
-    """
-    Load pre-existing index - DO NOT create new indices during training.
-    
-    This function should only be called during training when indices
-    have been pre-created in the indexing phase.
-    """
+    """Load pre-existing index - DO NOT create new indices during training."""
     index_dir = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
     ready_file = index_dir / ".ready"
     worker_id = os.getpid()
     
-    # Check if index exists
+    # Check if index exists WITH .ready marker
     if not ready_file.exists():
-        error_msg = (
+        raise FileNotFoundError(
             f"[Worker {worker_id}] Index not found for {repo_commit_hash}. "
-            f"Expected at: {index_dir}\n"
-            f"This should have been created during the pre-indexing phase. "
-            f"Please run the batched indexing script to create indices first."
+            f"Expected at: {index_dir} with .ready marker"
         )
-        log(error_msg)
-        raise FileNotFoundError(error_msg)
     
-    # Load existing index (read-only)
-    log(f"[Worker {worker_id}] Loading pre-existing index from {index_dir}")
-    try:
-        index = SemanticSearch(
-            collection_name=f"code_{repo_commit_hash}",
-            persist_directory=str(index_dir),
-            device="cpu",
-            num_threads=4,
-        )
-        log(f"[Worker {worker_id}] Successfully loaded index")
-        return index, str(index_dir)
-    except Exception as e:
-        log(f"[Worker {worker_id}] Failed to load index: {e}")
-        raise
+    # Load in read-only mode (will fail if collection doesn't exist)
+    index = SemanticSearch(
+        collection_name=f"code_{repo_commit_hash}",
+        persist_directory=str(index_dir),
+        device="cpu",
+        num_threads=4,
+        read_only=True,  # CRITICAL: Don't create, only load
+    )
+    
+    return index, str(index_dir)
     
 
 @server.list_tools()

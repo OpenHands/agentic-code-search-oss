@@ -8,7 +8,8 @@ batched_indexing:
   # Memory management
   cleanup_between_batches: true
   offload_models_during_training: true
-  
+  max_index_retries: 2  # Number of times to retry failed indices
+  skip_failed_indices: true  # Continue training even if some indices fail
   # Dataset configuration
   dataset: "SWE-Gym/SWE-Gym"
   split: "train"

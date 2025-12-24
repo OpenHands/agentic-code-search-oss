@@ -348,9 +348,14 @@ class EmbeddingService:
             f"{cleaned_count} indices, {freed_mb:.1f} MB freed"
         )
 
-    def get_or_load_index(self, repo_name: str, commit: str) -> SemanticSearch:
+    def get_or_load_index(self, repo_name: str, commit: str, repo_path: Optional[str] = None) -> SemanticSearch:
         """
         Get or load index for a specific repo+commit with LRU caching.
+        
+        Args:
+            repo_name: Repository name (e.g., "django/django")
+            commit: Commit hash
+            repo_path: Path to cloned repository (required for creating new indices)
         
         Uses current device (GPU for indexing, CPU for retrieval).
         """
@@ -358,46 +363,100 @@ class EmbeddingService:
         self.ensure_models_loaded()
         
         from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
-
         repo_commit_hash = get_repo_commit_hash(repo_name, commit)
 
         # Check if already in cache (and move to end for LRU)
         if repo_commit_hash in self.indices_cache:
-            # Move to end (most recently used)
             self.indices_cache.move_to_end(repo_commit_hash)
             return self.indices_cache[repo_commit_hash]
 
-        # Not in cache - need to load
         persist_dir = Path(self.cache_dir) / repo_commit_hash
+        ready_file = persist_dir / ".ready"
 
-        if not persist_dir.exists():
-            raise ValueError(
-                f"Index not found for {repo_name}@{commit[:8]}. "
-                f"Run pre-indexing first: python scripts/clone_and_index_repos.py"
+        # If index doesn't exist with .ready marker
+        if not ready_file.exists():
+            if repo_path is None:
+                raise ValueError(
+                    f"Index not found for {repo_name}@{commit[:8]} and no repo_path provided. "
+                    f"Expected .ready marker at: {ready_file}\n"
+                    f"Run pre-indexing first or provide repo_path to create index."
+                )
+            
+            # CREATE NEW INDEX (only during indexing phase)
+            if self.current_phase != 'indexing':
+                raise ValueError(
+                    f"Cannot create index during {self.current_phase} phase. "
+                    f"Index for {repo_name}@{commit[:8]} must be pre-created. "
+                    f"Switch to indexing phase first with enter_indexing_phase()."
+                )
+            
+            print(f"[EmbeddingService] Creating NEW index for {repo_name}@{commit[:8]}...")
+            print(f"[EmbeddingService]   Repo path: {repo_path}")
+            print(f"[EmbeddingService]   Index dir: {persist_dir}")
+            
+            # Enforce cache limits BEFORE creating
+            self._enforce_cache_limits()
+            
+            # Create new index
+            index = SemanticSearch(
+                collection_name=f"code_{repo_commit_hash}",
+                persist_directory=str(persist_dir),
+                embedding_model_name=self.embedding_model_name,
+                reranker_model_name=self.reranker_model_name,
+                device=self.current_device,
+                num_threads=4 if self.current_device == "cpu" else 1,
             )
+            
+            # Reuse our models
+            index.embedder = self.embedder
+            index.reranker = self.reranker
+            
+            # Index the repository
+            try:
+                stats = index.index_code_files(repo_path, file_extensions=[".py"])
+            except Exception as e:
+                print(f"[EmbeddingService] ✗ Indexing failed: {e}")
+                # Clean up partial index
+                if persist_dir.exists():
+                    shutil.rmtree(persist_dir)
+                raise ValueError(f"Failed to index {repo_name}@{commit[:8]}: {e}") from e
+            
+            # Create .ready marker after successful indexing
+            if stats["total_chunks"] > 0:
+                ready_file.touch()
+                print(f"[EmbeddingService] ✓ Created .ready marker ({stats['total_chunks']} chunks)")
+            else:
+                print(f"[EmbeddingService] ✗ WARNING: No chunks indexed!")
+                # Clean up empty index
+                if persist_dir.exists():
+                    shutil.rmtree(persist_dir)
+                raise ValueError(f"Failed to index {repo_name}@{commit[:8]} - no chunks created")
+            
+            # Add to cache
+            self.indices_cache[repo_commit_hash] = index
+            print(f"[EmbeddingService] Loaded NEW index for {repo_name}@{commit[:8]} on {self.current_device}")
+            return index
 
-        # Enforce cache limits BEFORE loading new index
+        # Load existing index (with .ready marker present)
         self._enforce_cache_limits()
-
-        # Load pre-computed index (fast, no model inference needed)
+        
         index = SemanticSearch(
             collection_name=f"code_{repo_commit_hash}",
             persist_directory=str(persist_dir),
             embedding_model_name=self.embedding_model_name,
             reranker_model_name=self.reranker_model_name,
-            device=self.current_device,  # Use current device
+            device=self.current_device,
             num_threads=4 if self.current_device == "cpu" else 1,
+            read_only=True,  # CRITICAL: Read-only mode during training
         )
-
-        # Reuse our already-loaded models instead of loading new ones
+        
         index.embedder = self.embedder
         index.reranker = self.reranker
-
-        # Add to cache (at end = most recently used)
+        
         self.indices_cache[repo_commit_hash] = index
         print(f"[EmbeddingService] Loaded index for {repo_name}@{commit[:8]} on {self.current_device} (cache: {len(self.indices_cache)}/{self.max_indices})")
-
-        return self.indices_cache[repo_commit_hash]
+        
+        return index
 
     def search(
         self,
@@ -444,7 +503,176 @@ class EmbeddingService:
             "models_loaded": self.models_loaded,
         }
 
-
+@ray.remote(num_cpus=2, num_gpus=0.25)
+class EmbeddingWorker:
+    """Parallel indexing worker that uses a fraction of GPU."""
+    
+    def __init__(self, worker_id: int, embedding_model: str, cache_dir: str, num_threads: int = 4):
+        import torch
+        from pathlib import Path
+        
+        self.worker_id = worker_id
+        self.cache_dir = Path(cache_dir)
+        
+        # Check GPU availability
+        if torch.cuda.is_available():
+            device = "cuda"
+            gpu_count = torch.cuda.device_count()
+            gpu_name = torch.cuda.get_device_name(0)
+            
+            print(f"[Worker {worker_id}] 🔥 GPU AVAILABLE")
+            print(f"[Worker {worker_id}]   - Device count: {gpu_count}")
+            print(f"[Worker {worker_id}]   - GPU name: {gpu_name}")
+            print(f"[Worker {worker_id}]   - CUDA version: {torch.version.cuda}")
+        else:
+            device = "cpu"
+            print(f"[Worker {worker_id}] ⚠️  NO GPU - using CPU")
+        
+        print(f"[Worker {worker_id}] Loading embedder on {device}...")
+        
+        # Load embedder
+        self.embedder = SentenceTransformer(
+            embedding_model,
+            device=device,
+            model_kwargs={'torch_dtype': torch.float16} if device == "cuda" else {}
+        )
+        
+        # Verify embedder device
+        print(f"[Worker {worker_id}] Embedder model device: {self.embedder.device}")
+        
+        if device == "cuda":
+            # Print GPU memory usage
+            allocated = torch.cuda.memory_allocated() / 1024**3
+            reserved = torch.cuda.memory_reserved() / 1024**3
+            print(f"[Worker {worker_id}] GPU memory: {allocated:.2f}GB allocated, {reserved:.2f}GB reserved")
+        else:
+            torch.set_num_threads(num_threads)
+        
+        print(f"[Worker {worker_id}] ✓ Ready on {device}")
+    
+    def index_repo(self, repo_name: str, commit: str, repo_path: str) -> dict:
+        """Index a single repository."""
+        import shutil
+        import torch
+        from pathlib import Path
+        from src.tools.semantic_search import SemanticSearch
+        from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
+        
+        try:
+            print(f"\n[Worker {self.worker_id}] 🔨 Starting indexing: {repo_name}@{commit[:7]}")
+            
+            device_type = self.embedder.device.type
+            print(f"[Worker {self.worker_id}]   Device: {device_type}")
+            
+            if device_type == "cuda":
+                gpu_id = self.embedder.device.index or 0
+                before_mem = torch.cuda.memory_allocated(gpu_id) / 1024**3
+                print(f"[Worker {self.worker_id}]   GPU {gpu_id} memory before: {before_mem:.2f}GB")
+            
+            repo_commit_hash = get_repo_commit_hash(repo_name, commit)
+            index_path = self.cache_dir / repo_commit_hash
+            ready_file = index_path / ".ready"
+            
+            print(f"[Worker {self.worker_id}]   Index path: {index_path}")
+            print(f"[Worker {self.worker_id}]   Ready file: {ready_file}")
+            
+            # Check if already indexed
+            if ready_file.exists():
+                print(f"[Worker {self.worker_id}] ✓ Already indexed (cached)")
+                return {
+                    'success': True,
+                    'repo_name': repo_name,
+                    'commit': commit,
+                    'cached': True,
+                    'worker_id': self.worker_id,
+                    'device': device_type
+                }
+            
+            # Create index directory
+            index_path.mkdir(parents=True, exist_ok=True)
+            print(f"[Worker {self.worker_id}]   Created index directory")
+            
+            # Create SemanticSearch with pre-loaded embedder (NO GPU ALLOCATION!)
+            print(f"[Worker {self.worker_id}]   Creating SemanticSearch with shared embedder...")
+            index = SemanticSearch(
+                collection_name=f"code_{repo_commit_hash}",
+                persist_directory=str(index_path),
+                device=device_type,
+                max_chunk_size=512,
+                embedder=self.embedder,  # PASS PRE-LOADED EMBEDDER
+                reranker=None,  # No reranker during indexing
+            )
+            
+            print(f"[Worker {self.worker_id}]   Indexing files...")
+            
+            import time
+            start_time = time.time()
+            
+            stats = index.index_code_files(
+                repo_path,
+                file_extensions=[".py"],
+                batch_size=128,
+            )
+            
+            index_time = time.time() - start_time
+            
+            print(f"[Worker {self.worker_id}]   Indexing complete. Chunks: {stats['total_chunks']}")
+            
+            if stats["total_chunks"] == 0:
+                print(f"[Worker {self.worker_id}]   ✗ No chunks created, cleaning up...")
+                if index_path.exists():
+                    shutil.rmtree(index_path, ignore_errors=True)
+                raise ValueError("No chunks indexed")
+            
+            # CREATE .ready MARKER
+            print(f"[Worker {self.worker_id}]   Creating .ready marker at: {ready_file}")
+            ready_file.touch()
+            
+            # VERIFY
+            if ready_file.exists():
+                print(f"[Worker {self.worker_id}]   ✓ .ready marker verified")
+            else:
+                print(f"[Worker {self.worker_id}]   ✗ WARNING: .ready marker NOT created!")
+            
+            if device_type == "cuda":
+                after_mem = torch.cuda.memory_allocated(gpu_id) / 1024**3
+                mem_used = after_mem - before_mem
+                print(f"[Worker {self.worker_id}]   GPU {gpu_id} memory after: {after_mem:.2f}GB (delta: +{mem_used:.2f}GB)")
+            
+            chunks_per_sec = stats['total_chunks'] / index_time if index_time > 0 else 0
+            print(f"[Worker {self.worker_id}] ✓ Indexed in {index_time:.1f}s ({stats['total_chunks']} chunks, {chunks_per_sec:.1f} chunks/sec)")
+            
+            return {
+                'success': True,
+                'repo_name': repo_name,
+                'commit': commit,
+                'cached': False,
+                'chunks': stats['total_chunks'],
+                'worker_id': self.worker_id,
+                'device': device_type,
+                'index_time': index_time,
+                'chunks_per_sec': chunks_per_sec
+            }
+            
+        except Exception as e:
+            print(f"[Worker {self.worker_id}] ✗ Failed: {e}")
+            import traceback
+            traceback.print_exc()
+            
+            # Clean up
+            if 'index_path' in locals() and index_path.exists():
+                print(f"[Worker {self.worker_id}]   Cleaning up partial index: {index_path}")
+                shutil.rmtree(index_path, ignore_errors=True)
+            
+            return {
+                'success': False,
+                'repo_name': repo_name,
+                'commit': commit,
+                'error': str(e),
+                'worker_id': self.worker_id,
+                'device': device_type if hasattr(self, 'embedder') else 'unknown'
+            }
+        
 def get_embedding_service(
     max_indices: int = 20,
     max_cache_size_gb: Optional[float] = None,

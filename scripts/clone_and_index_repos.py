@@ -22,7 +22,7 @@ import hashlib
 import subprocess
 from pathlib import Path
 from collections import defaultdict
-
+import shutil
 from datasets import load_dataset
 from tqdm import tqdm
 
@@ -97,10 +97,8 @@ def clone_instance(
 
     repo_commit_hash = get_repo_commit_hash(repo_name, commit_id)
     persist_dir = cache_dir / repo_commit_hash
-
-    # Check if already indexed
-    index_existed = False
-    if persist_dir.exists():
+    ready_file = persist_dir / ".ready"
+    if ready_file.exists():  # CHANGE THIS CHECK
         try:
             search = SemanticSearch(
                 collection_name=f"code_{repo_commit_hash}",
@@ -109,13 +107,10 @@ def clone_instance(
             stats = search.get_stats()
             if stats["total_documents"] > 0:
                 index_existed = True
+                return True, True  # Already indexed successfully
         except Exception:
             # Index corrupted, will rebuild
             pass
-
-    if index_existed:
-        return True, True
-
     # Create index
     try:
         device = "cuda" if use_gpu else "cpu"
@@ -126,7 +121,6 @@ def clone_instance(
             reranker_model_name="jinaai/jina-reranker-v3",
         )
 
-        # Override device if needed
         if not use_gpu:
             search.embedder.device = "cpu"
             if search.reranker:
@@ -134,7 +128,21 @@ def clone_instance(
 
         stats = search.index_code_files(str(instance_path), file_extensions=[".py"])
 
-        return True, True
+        # ADD THIS: Create .ready marker after successful indexing
+        if stats["total_chunks"] > 0:
+            ready_file.touch()
+            print(f"✓ Created .ready marker for {repo_commit_hash}")
+            return True, True
+        else:
+            print(f"✗ No chunks indexed for {repo_commit_hash}")
+            return True, False
+
+    except Exception as e:
+        print(f"✗ Indexing failed for {repo_commit_hash}: {e}")
+        # Clean up partial index
+        if persist_dir.exists():
+            shutil.rmtree(persist_dir)
+        return True, False
 
     except Exception as e:
         # Clone succeeded but indexing failed
