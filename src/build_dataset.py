@@ -20,9 +20,29 @@ def main():
         lambda row: f"{extract_functions_from_patch(row['patch'])}", axis=1
     )
 
+    # Remove rows with empty problem_statement
+    dataset = dataset[dataset["problem_statement"].str.strip().astype(bool)]
+
     dataset["prompt"] = dataset.apply(
         lambda row: [{"role": "user", "content": row["problem_statement"]}], axis=1
     )
+
+    if "base_commit" not in dataset.columns:
+        dataset["base_commit"] = dataset["repo"].apply(
+            lambda x: x.split(".")[-1]
+        )
+
+        dataset["repo"] = dataset["repo"].apply(
+            lambda x: x.split("/")[-1].split(".")[0].replace("__", "/")
+        )
+
+        dataset["use_patch"] = True
+
+    # Drop "PASS_TO_PASS" and "FAIL_TO_PASS" columns
+    try:
+        dataset = dataset.drop(columns=["PASS_TO_PASS", "FAIL_TO_PASS"])
+    except KeyError:
+        pass
 
     # shuffle dataset
     dataset = dataset.sample(frac=1).reset_index(drop=True)
