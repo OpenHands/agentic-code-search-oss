@@ -573,6 +573,7 @@ class EmbeddingWorker:
             index_path = self.cache_dir / repo_commit_hash
             ready_file = index_path / ".ready"
             
+            print(f"[Worker {self.worker_id}]   Repo hash: {repo_commit_hash}")
             print(f"[Worker {self.worker_id}]   Index path: {index_path}")
             print(f"[Worker {self.worker_id}]   Ready file: {ready_file}")
             
@@ -592,18 +593,18 @@ class EmbeddingWorker:
             index_path.mkdir(parents=True, exist_ok=True)
             print(f"[Worker {self.worker_id}]   Created index directory")
             
-            # Create SemanticSearch with pre-loaded embedder (NO GPU ALLOCATION!)
+            # Create SemanticSearch with pre-loaded embedder
             print(f"[Worker {self.worker_id}]   Creating SemanticSearch with shared embedder...")
             index = SemanticSearch(
                 collection_name=f"code_{repo_commit_hash}",
                 persist_directory=str(index_path),
                 device=device_type,
                 max_chunk_size=512,
-                embedder=self.embedder,  # PASS PRE-LOADED EMBEDDER
-                reranker=None,  # No reranker during indexing
+                embedder=self.embedder,  # Pass pre-loaded embedder
+                reranker=None,
             )
             
-            print(f"[Worker {self.worker_id}]   Indexing files...")
+            print(f"[Worker {self.worker_id}]   Indexing files from: {repo_path}")
             
             import time
             start_time = time.time()
@@ -624,16 +625,30 @@ class EmbeddingWorker:
                     shutil.rmtree(index_path, ignore_errors=True)
                 raise ValueError("No chunks indexed")
             
-            # CREATE .ready MARKER
-            print(f"[Worker {self.worker_id}]   Creating .ready marker at: {ready_file}")
+            # ✅ CRITICAL: CREATE .ready MARKER
+            print(f"[Worker {self.worker_id}]   Creating .ready marker...")
+            print(f"[Worker {self.worker_id}]   Ready file path: {ready_file}")
+            print(f"[Worker {self.worker_id}]   Ready file parent exists: {ready_file.parent.exists()}")
+            
+            # Create the .ready file
             ready_file.touch()
             
-            # VERIFY
+            # ✅ VERIFY IT WAS CREATED
             if ready_file.exists():
-                print(f"[Worker {self.worker_id}]   ✓ .ready marker verified")
+                print(f"[Worker {self.worker_id}]   ✓✓✓ .ready marker CREATED and VERIFIED")
+                # Double-check file system sync
+                import os
+                os.sync()
+                # Verify again after sync
+                if ready_file.exists():
+                    print(f"[Worker {self.worker_id}]   ✓✓✓ .ready marker still exists after sync")
+                else:
+                    print(f"[Worker {self.worker_id}]   ✗✗✗ .ready marker DISAPPEARED after sync!")
             else:
-                print(f"[Worker {self.worker_id}]   ✗ WARNING: .ready marker NOT created!")
-            
+                print(f"[Worker {self.worker_id}]   ✗✗✗ WARNING: .ready marker NOT created!")
+                # Try to debug why
+                print(f"[Worker {self.worker_id}]   Index path writable: {os.access(str(index_path), os.W_OK)}")
+                
             if device_type == "cuda":
                 after_mem = torch.cuda.memory_allocated(gpu_id) / 1024**3
                 mem_used = after_mem - before_mem
@@ -651,7 +666,8 @@ class EmbeddingWorker:
                 'worker_id': self.worker_id,
                 'device': device_type,
                 'index_time': index_time,
-                'chunks_per_sec': chunks_per_sec
+                'chunks_per_sec': chunks_per_sec,
+                'repo_hash': repo_commit_hash,  # Add this for debugging
             }
             
         except Exception as e:
@@ -659,7 +675,7 @@ class EmbeddingWorker:
             import traceback
             traceback.print_exc()
             
-            # Clean up
+            # Clean up partial index
             if 'index_path' in locals() and index_path.exists():
                 print(f"[Worker {self.worker_id}]   Cleaning up partial index: {index_path}")
                 shutil.rmtree(index_path, ignore_errors=True)

@@ -94,7 +94,6 @@ class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
 
             # Check staleness violation.
             if cur_staleness > self.max_staleness_steps:
-                # TODO(Charlie): should we drop, drop and resample, or just log?
                 logger.warning(
                     "Staleness control violated despite using AsyncStalenessManager: "
                     f"cur_staleness={cur_staleness}, max_staleness_steps={self.max_staleness_steps}.\n"
@@ -119,18 +118,27 @@ class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
             }
         )
 
-        # Convert rewards to per-token form and compute reward metrics before training conversion
-        uids = generator_output["trajectory_ids"]
+        # ✅ FIX: Convert TrajectoryID objects to strings for use as dict keys
+        trajectory_ids = generator_output["trajectory_ids"]
+        
+        # Convert TrajectoryID to string if needed
+        if trajectory_ids and hasattr(trajectory_ids[0], '__dict__'):
+            # TrajectoryID objects - convert to strings
+            uids_hashable = [str(tid) for tid in trajectory_ids]
+        else:
+            # Already strings or ints
+            uids_hashable = trajectory_ids
+        
         step_wise_training = self.cfg.trainer.step_wise_training
         self.cfg.trainer.step_wise_training = False
-        generator_output = self.postprocess_generator_output(generator_output, uids)
+        
+        generator_output = self.postprocess_generator_output(generator_output, uids_hashable)
 
         # print example just for debugging
         vis = self.tokenizer.decode(generator_output["response_ids"][0])
         logger.info(f"Example generated: {vis}")
 
-        # return self.convert_to_training_input(generator_output, uids)
-        training_input = self.convert_to_training_input(generator_output, uids)
+        training_input = self.convert_to_training_input(generator_output, uids_hashable)
         self.cfg.trainer.step_wise_training = step_wise_training
         return training_input
 
