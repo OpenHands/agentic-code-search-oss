@@ -1,12 +1,11 @@
 from __future__ import annotations
 import os
 import sys
-import time
-import fcntl
 from pathlib import Path
-from typing import Optional, List, Any
+from typing import Any
 import hashlib
 import subprocess
+import gc
 
 try:
     from mcp.server import Server
@@ -15,7 +14,6 @@ try:
 except ImportError as e:
     raise ImportError(f"Please install MCP SDK: uv pip install mcp fastmcp\nError: {e}")
 
-# Import SemanticSearch at the top
 from src.tools.semantic_search import SemanticSearch
 
 
@@ -26,32 +24,9 @@ def log(msg: str):
 
 server = Server("semantic-code-search-training")
 
-# Global embedding service (initialized once)
-embedding_service = None
-
-
-def get_embedding_service():
-    """Get or create the global embedding service."""
-    global embedding_service
-    if embedding_service is None:
-        # Initialize your embedding service here
-        # This should match whatever you use in SemanticSearch
-        try:
-            import ray
-            from src.tools.embedding_service import EmbeddingService
-            
-            # Get the embedding service from Ray if available
-            if ray.is_initialized():
-                embedding_service = ray.get_actor("EmbeddingService")
-            else:
-                # Create a local one if Ray is not available
-                log("[EmbeddingService] Ray not initialized, using local service")
-                embedding_service = None  # SemanticSearch will create its own
-        except Exception as e:
-            log(f"[EmbeddingService] Could not get service: {e}, using local")
-            embedding_service = None
-    
-    return embedding_service
+# ✅ Global cache for loaded index (one per MCP server process)
+_loaded_index = None
+_loaded_hash = None
 
 
 def get_workspace_path() -> str:
@@ -67,13 +42,13 @@ def get_repo_info(repo_path: Path) -> tuple[str, str]:
     try:
         result = subprocess.run(
             ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=10
         )
         commit = result.stdout.strip()
 
         result = subprocess.run(
             ["git", "-C", str(repo_path), "config", "--get", "remote.origin.url"],
-            capture_output=True, text=True, check=True,
+            capture_output=True, text=True, check=True, timeout=10
         )
         url = result.stdout.strip()
 
@@ -84,62 +59,113 @@ def get_repo_info(repo_path: Path) -> tuple[str, str]:
             repo_name = repo_path.name
 
         return repo_name, commit
-    except Exception:
+    except Exception as e:
+        log(f"[get_repo_info] Error: {e}")
         return repo_path.name, "unknown"
 
 
 def get_repo_commit_hash(repo_name: str, commit: str) -> str:
-    """Get unique hash for (repo, commit) pair."""
+    """
+    Get unique hash for (repo, commit) pair.
+    
+    CRITICAL: This must match the hash function used in:
+    - src/services/batched_index_manager.py
+    - src/services/embedding_service.py
+    - scripts/clone_and_index_repos.py
+    """
     key = f"{repo_name}:{commit}"
     return hashlib.sha256(key.encode()).hexdigest()[:16]
 
 
-class FileLock:
-    """Simple file-based lock for coordinating ChromaDB access."""
+def load_index(repo_commit_hash: str) -> SemanticSearch:
+    """
+    Load index from disk in read-only mode.
     
-    def __init__(self, lock_file: Path | str):
-        self.lock_file = Path(lock_file) if isinstance(lock_file, str) else lock_file
-        self.lock_file.parent.mkdir(parents=True, exist_ok=True)
-        self.fp = None
+    Caches the loaded index globally to avoid reloading on every search.
+    Memory-efficient: only loads embedder on CPU with limited threads.
     
-    def __enter__(self):
-        self.fp = open(self.lock_file, 'w')
-        log(f"[FileLock] Waiting for lock: {self.lock_file}")
-        fcntl.flock(self.fp.fileno(), fcntl.LOCK_EX)
-        log(f"[FileLock] Acquired lock: {self.lock_file}")
-        return self
+    Args:
+        repo_commit_hash: 16-character hash identifying the repo+commit
+        
+    Returns:
+        SemanticSearch instance loaded in read-only mode
+        
+    Raises:
+        FileNotFoundError: If index or .ready marker doesn't exist
+        ValueError: If index is empty
+    """
+    global _loaded_index, _loaded_hash
     
-    def __exit__(self, exc_type, exc_val, exc_tb):
-        if self.fp:
-            fcntl.flock(self.fp.fileno(), fcntl.LOCK_UN)
-            self.fp.close()
-            log(f"[FileLock] Released lock: {self.lock_file}")
-
-
-def ensure_index_exists(repo_commit_hash: str, workspace_path: str) -> tuple[SemanticSearch, str]:
-    """Load pre-existing index - DO NOT create new indices during training."""
-    index_dir = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
-    ready_file = index_dir / ".ready"
-    worker_id = os.getpid()
+    # ✅ Return cached index if same repo
+    if _loaded_index is not None and _loaded_hash == repo_commit_hash:
+        log(f"[load_index] Using cached index for {repo_commit_hash}")
+        return _loaded_index
     
-    # Check if index exists WITH .ready marker
-    if not ready_file.exists():
+    # ✅ Clear previous index to free memory
+    if _loaded_index is not None:
+        log(f"[load_index] Clearing previous index {_loaded_hash}")
+        del _loaded_index
+        _loaded_index = None
+        _loaded_hash = None
+        gc.collect()
+    
+    # ✅ CRITICAL: Path must match what batched indexing uses
+    cache_dir = os.getenv("EMBEDDING_CACHE_DIR", "/data/user_data/sanidhyv/tmp/embedding_cache")
+    index_path = Path(cache_dir) / repo_commit_hash
+    ready_file = index_path / ".ready"
+    
+    log(f"[load_index] Looking for index at: {index_path}")
+    
+    if not index_path.exists():
         raise FileNotFoundError(
-            f"[Worker {worker_id}] Index not found for {repo_commit_hash}. "
-            f"Expected at: {index_dir} with .ready marker"
+            f"Index directory not found: {index_path}\n"
+            f"Expected hash: {repo_commit_hash}"
         )
     
-    # Load in read-only mode (will fail if collection doesn't exist)
-    index = SemanticSearch(
-        collection_name=f"code_{repo_commit_hash}",
-        persist_directory=str(index_dir),
-        device="cpu",
-        num_threads=4,
-        read_only=True,  # CRITICAL: Don't create, only load
-    )
+    if not ready_file.exists():
+        raise FileNotFoundError(
+            f"Index not ready for {repo_commit_hash}. "
+            f"Missing .ready marker at: {ready_file}\n"
+            f"This usually means indexing failed or is incomplete."
+        )
     
-    return index, str(index_dir)
+    log(f"[load_index] Loading index from {index_path}")
     
+    # ✅ CRITICAL: Model names must match what was used during indexing
+    embedding_model = os.getenv("EMBEDDING_MODEL", "jinaai/jina-code-embeddings-0.5b")
+    
+    # ✅ Load in read-only mode, CPU-only, limited threads
+    try:
+        index = SemanticSearch(
+            collection_name=f"code_{repo_commit_hash}",
+            persist_directory=str(index_path),
+            embedding_model_name=embedding_model,
+            reranker_model_name=None,  # ✅ No reranker to save memory
+            device="cpu",
+            num_threads=2,  # ✅ Limit CPU threads to 2 per process
+            read_only=True,  # ✅ Read-only mode prevents write conflicts
+        )
+    except Exception as e:
+        log(f"[load_index] Failed to create SemanticSearch: {e}")
+        raise
+    
+    # Verify it loaded
+    try:
+        stats = index.get_stats()
+        log(f"[load_index] ✓ Loaded {stats['total_documents']} documents")
+        
+        if stats["total_documents"] == 0:
+            raise ValueError(f"Index is empty for {repo_commit_hash}")
+    except Exception as e:
+        log(f"[load_index] Failed to get stats: {e}")
+        raise
+    
+    # ✅ Cache it globally
+    _loaded_index = index
+    _loaded_hash = repo_commit_hash
+    
+    return index
+
 
 @server.list_tools()
 async def list_tools() -> list[Tool]:
@@ -149,7 +175,8 @@ async def list_tools() -> list[Tool]:
             name="semantic_search",
             description=(
                 "Search the current repository using semantic similarity. "
-                "Automatically uses the workspace repository."
+                "Automatically uses the workspace repository. "
+                "Returns relevant code chunks with file paths and similarity scores."
             ),
             inputSchema={
                 "type": "object",
@@ -188,10 +215,22 @@ async def call_tool(name: str, arguments: dict[str, Any]) -> list[TextContent]:
 
 
 async def handle_semantic_search(arguments: dict[str, Any]) -> list[TextContent]:
-    """Handle semantic search with proper concurrency control."""
+    """
+    Handle semantic search by loading index directly from disk.
+    
+    This is the main entry point for semantic search during training.
+    Compatible with the batched indexing workflow in train_batched.py.
+    """
     query = arguments["query"]
-    repo_path = Path(get_workspace_path()).resolve()
     n_results = arguments.get("n_results", 10)
+    
+    # Get workspace path
+    try:
+        repo_path = Path(get_workspace_path()).resolve()
+    except ValueError as e:
+        error_msg = f"WORKSPACE_PATH not set: {str(e)}"
+        log(error_msg)
+        return [TextContent(type="text", text=error_msg)]
     
     log(f"[Semantic Search] Query: '{query}'")
     log(f"[Semantic Search] Repo: {repo_path}")
@@ -199,34 +238,43 @@ async def handle_semantic_search(arguments: dict[str, Any]) -> list[TextContent]
     if not repo_path.exists():
         return [TextContent(type="text", text=f"Error: Repository path does not exist: {repo_path}")]
 
-    # Get repo info
-    repo_name, commit = get_repo_info(repo_path)
-    repo_commit_hash = get_repo_commit_hash(repo_name, commit)
-    
-    log(f"[Semantic Search] Repo: {repo_name}@{commit[:8]}, Hash: {repo_commit_hash}")
-    
-    # Ensure index exists (with locking to prevent concurrent creation)
-    # This returns (index, index_path) tuple
+    # Get repo info from git
     try:
-        index, index_path = ensure_index_exists(repo_commit_hash, str(repo_path))
-        log(f"[Semantic Search] Index ready at: {index_path}")
+        repo_name, commit = get_repo_info(repo_path)
+        repo_commit_hash = get_repo_commit_hash(repo_name, commit)
+        log(f"[Semantic Search] Repo: {repo_name}@{commit[:8]}, Hash: {repo_commit_hash}")
     except Exception as e:
-        error_msg = f"Failed to create/load index: {str(e)}"
+        error_msg = f"Failed to get repo info: {str(e)}"
         log(error_msg)
         return [TextContent(type="text", text=error_msg)]
     
-    # Now perform the search
+    # Load index from disk
     try:
-        stats = index.get_stats()
-        log(f"[Semantic Search] Searching {stats['total_documents']} documents")
-        
-        if stats["total_documents"] == 0:
-            return [TextContent(type="text", text=f"Index is empty (no documents found)")]
-        
+        index = load_index(repo_commit_hash)
+    except FileNotFoundError as e:
+        error_msg = str(e)
+        log(f"[Semantic Search] {error_msg}")
+        return [TextContent(type="text", text=f"Index not available: {error_msg}")]
+    except ValueError as e:
+        error_msg = str(e)
+        log(f"[Semantic Search] {error_msg}")
+        return [TextContent(type="text", text=error_msg)]
+    except Exception as e:
+        import traceback
+        error_msg = f"Failed to load index: {str(e)}\n{traceback.format_exc()}"
+        log(error_msg)
+        return [TextContent(type="text", text=f"Error loading index: {str(e)}")]
+    
+    # Perform search
+    try:
+        log(f"[Semantic Search] Searching with query: '{query}', n_results: {n_results}")
         results = index.search(query, n_results=n_results, use_reranker=False)
         
         if not results:
+            log(f"[Semantic Search] No results found")
             return [TextContent(type="text", text=f"No results found for query: {query}")]
+        
+        log(f"[Semantic Search] Found {len(results)} results")
         
         # Format results
         output_lines = [f"Found {len(results)} relevant code chunks for: '{query}'\n"]
@@ -243,12 +291,15 @@ async def handle_semantic_search(arguments: dict[str, Any]) -> list[TextContent]
             
             content = result["content"]
             lines = content.split("\n")
+            
+            # ✅ Truncate long chunks to avoid token limits
             if len(lines) > 20:
                 preview = "\n".join(lines[:20])
                 output_lines.append(f"\n{preview}\n   ... ({len(lines)} total lines)")
             else:
                 output_lines.append(f"\n{content}")
         
+        # ✅ Add unique files summary
         unique_files = list(set(r["file_path"] for r in results))
         output_lines.append(f"\n\nUnique files ({len(unique_files)}):")
         for file_path in unique_files:
@@ -261,11 +312,17 @@ async def handle_semantic_search(arguments: dict[str, Any]) -> list[TextContent]
         import traceback
         error_msg = f"Error in semantic search: {str(e)}\n{traceback.format_exc()}"
         log(error_msg)
-        return [TextContent(type="text", text=f"Error: {str(e)}")]
+        return [TextContent(type="text", text=f"Search error: {str(e)}")]
 
 
 async def main():
     """Run the MCP server."""
+    log("[MCP Server] Starting semantic-code-search-training server")
+    log(f"[MCP Server] Python: {sys.version}")
+    log(f"[MCP Server] Working dir: {os.getcwd()}")
+    log(f"[MCP Server] WORKSPACE_PATH: {os.getenv('WORKSPACE_PATH', 'not set')}")
+    log(f"[MCP Server] EMBEDDING_CACHE_DIR: {os.getenv('EMBEDDING_CACHE_DIR', 'using default')}")
+    
     async with stdio_server() as (read_stream, write_stream):
         await server.run(
             read_stream,

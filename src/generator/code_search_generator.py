@@ -94,7 +94,20 @@ def init_and_run(
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
-    
+    from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
+    expected_hash = get_repo_commit_hash(repo_name, commit_id)
+    print(f"[Episode {instance_id}] Expected hash: {expected_hash}")
+    print(f"[Episode {instance_id}] Repo: {repo_name}@{commit_id[:7]}")
+    from pathlib import Path
+    cache_dir = Path("/data/user_data/sanidhyv/tmp/embedding_cache")
+    index_path = cache_dir / expected_hash
+    ready_file = index_path / ".ready"
+
+    print(f"[Episode {instance_id}] Index path exists: {index_path.exists()}")
+    print(f"[Episode {instance_id}] .ready file exists: {ready_file.exists()}")
+
+    if not ready_file.exists():
+        print(f"[Episode {instance_id}] ❌ HASH MISMATCH - this instance should not be in training batch!")
     worker_id = os.getpid()
     workspace = Path(f"/data/user_data/sanidhyv/tmp/testbed_{worker_id}/")
     workspace.mkdir(parents=True, exist_ok=True)

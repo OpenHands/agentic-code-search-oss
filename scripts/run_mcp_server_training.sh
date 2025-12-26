@@ -1,12 +1,17 @@
 #!/bin/bash
-# MCP server wrapper for training (lightweight, uses Ray actor)
+# Get the script directory
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-cd "$SCRIPT_DIR"
 
-export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+# ✅ Change to repo root instead of scripts/
+REPO_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+cd "$REPO_ROOT"
 
-if [ -f "$SCRIPT_DIR/.venv/bin/python" ]; then
-    exec "$SCRIPT_DIR/.venv/bin/python" ../src/mcp_server/training_semantic_search_server.py
+export PYTHONPATH="$REPO_ROOT:$PYTHONPATH"
+
+# ✅ Use uv run with correct working directory
+if [ -f "$REPO_ROOT/.venv/bin/python" ]; then
+    exec "$REPO_ROOT/.venv/bin/python" src/mcp_server/training_semantic_search_server.py
 else
-    exec python ../src/mcp_server/training_semantic_search_server.py
+    # Use uv run from repo root
+    exec uv run --directory "$REPO_ROOT" python src/mcp_server/training_semantic_search_server.py
 fi

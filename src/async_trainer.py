@@ -1,11 +1,11 @@
 import numpy as np
 import torch
+import asyncio
 
 from loguru import logger
 from typing import List
-
+from skyrl_train.utils import Timer
 from skyrl_train.utils import ppo_utils, trainer_utils
-
 from skyrl_train.generators.utils import get_rollout_metrics
 from skyrl_train.generators.base import GeneratorOutput
 from skyrl_train.training_batch import TrainingInputBatch
@@ -53,7 +53,6 @@ def patched_concatenate_generator_outputs(generator_outputs: List[GeneratorOutpu
         logger.info(f"Attempting to concatenate values for additional keys {additional_keys}")
     for key in additional_keys:
         try:
-            # result[key] = sum([generator_output[key] for generator_output in generator_outputs], [])
             additional_result[key] = np.mean([generator_output[key] for generator_output in generator_outputs]).item()
         except Exception as e:
             logger.error(f"Error in aggregating key {key}: {e}", exc_info=True)
@@ -63,19 +62,32 @@ def patched_concatenate_generator_outputs(generator_outputs: List[GeneratorOutpu
     result["rollout_metrics"] = {**rollout_metrics, **additional_result}
 
     # Validate the generator output using the number of prompts
-    # Import here to avoid circular dependency.
     from skyrl_train.utils.trainer_utils import validate_generator_output
-
-    # print("trajectory_ids", result["trajectory_ids"])
-    # print("rewards", result["rewards"])
-    # print("is_last_step", result["is_last_step"])
 
     num_prompts = len(result["prompt_token_ids"])
     validate_generator_output(num_prompts, result)
 
     return result
 
+
 class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
+    """
+    Custom async trainer for batched training.
+    
+    Key changes:
+    1. Prevents automatic epoch looping (for batched training control)
+    2. Fixes TrajectoryID serialization for step-wise training
+    """
+
+    def __init__(self, *args, **kwargs):
+        super().__init__(*args, **kwargs)
+        # Flag to control whether to loop epochs or stop after one
+        self._single_epoch_mode = False
+
+    def enable_single_epoch_mode(self):
+        """Enable single-epoch mode for batched training."""
+        self._single_epoch_mode = True
+        logger.info("[CustomAsyncTrainer] Single-epoch mode enabled")
 
     def convert_generation_group_mini_batch_to_training_input(
         self, cur_generation_group_mini_batch: List[GeneratedOutputGroup]
@@ -142,110 +154,175 @@ class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
         self.cfg.trainer.step_wise_training = step_wise_training
         return training_input
 
-    # @torch.no_grad()
-    # def compute_advantages_and_returns(self, data: TrainingInputBatch) -> TrainingInputBatch:
-    #     """Calculate advantages and returns for the data batch.
+    async def train(self):
+        """
+        Override train() to support single-epoch mode for batched training.
+        
+        When single_epoch_mode is enabled, this will:
+        1. Run exactly one epoch (even if cfg.trainer.epochs > 1)
+        2. NOT reset the dataloader at epoch end
+        3. NOT validate staleness manager at epoch end
+        4. Return cleanly after one epoch completes
+        """
+        self.global_step = 0
 
-    #     Expects:
-    #         - `["sequences"]`: Integer[torch.Tensor, "batch_size seqlen"]
-    #         - `["response_mask"]`: Integer[torch.Tensor, "batch_size seqlen"]
-    #         - `["loss_mask"]`: Integer[torch.Tensor, "batch_size seqlen"]
-    #         - `["values"]`: Float[torch.Tensor, "batch_size seqlen"]
-    #         - `["rewards"]`: Float[torch.Tensor, "batch_size seqlen"]
-    #         - `.metadata["uids"]`: List[str]
+        # Load checkpoint state if resumption is enabled
+        if self.resume_mode != trainer_utils.ResumeMode.NONE:
+            with Timer("load_checkpoints"):
+                self.global_step, _, loaded_consumed_data_uids_set = self.load_checkpoints()
+                logger.info(f"Resumed training from global_step {self.global_step}")
+                if self.global_step > 0:
+                    self.async_train_dataloader.load_state_from_checkpoint(loaded_consumed_data_uids_set)
+                    self._staleness_manager.load_state_from_checkpoint(self.global_step + 1)
+                    expected_consumed_in_epoch = self.mini_batch_size * (self.global_step % self.num_steps_per_epoch)
+                    assert len(loaded_consumed_data_uids_set) == expected_consumed_in_epoch, (
+                        "Unexpected number of consumed data UIDs. Got: "
+                        f"{len(loaded_consumed_data_uids_set)} != {expected_consumed_in_epoch}"
+                    )
 
-    #     Adds:
-    #         - `["advantages"]`: Float[torch.Tensor, "batch_size seqlen"]
-    #         - `["returns"]`: Float[torch.Tensor, "batch_size seqlen"]
-    #     """
-    #     token_level_rewards = data["rewards"]
+        # Initialize weight sync state
+        with Timer("init_weight_sync_state"):
+            self.init_weight_sync_state()
 
-    #     if self.cfg.trainer.step_wise_training:
-    #         is_last_step = data["is_last_step"].bool()
-    #         print("is_last_step", is_last_step)
-    #         response_mask = data["response_mask"]
-    #         index = np.array(data.metadata["uids"])
-    #         print("index", index)
-    #         adv_estimator = self.cfg.trainer.algorithm.advantage_estimator
-    #         config = self.cfg.trainer.algorithm
-    #         values = data["values"]
-    #         gamma = self.cfg.trainer.algorithm.gamma
-    #         lambd = self.cfg.trainer.algorithm.lambd
-    #         grpo_norm_by_std = self.cfg.trainer.algorithm.grpo_norm_by_std
-    #         last_step_rewards = token_level_rewards[is_last_step]
-    #         # compatible with any advantage estimator
-    #         last_step_advantages, last_step_returns = ppo_utils.compute_advantages_and_returns(
-    #             token_level_rewards=last_step_rewards,
-    #             response_mask=response_mask[is_last_step],
-    #             index=index[is_last_step.cpu().numpy()],
-    #             adv_estimator=adv_estimator,
-    #             values=values[is_last_step] if values is not None else None,
-    #             config=config,
-    #             gamma=gamma,
-    #             lambd=lambd,
-    #             grpo_norm_by_std=grpo_norm_by_std,
-    #         )
-    #         traj_ids = (
-    #             torch.cat([torch.tensor([False], device=is_last_step.device), is_last_step[:-1]]).int().cumsum(dim=0)
-    #         )
-    #         print(f"traj_ids: {traj_ids}")
-    #         num_groups = traj_ids[-1].item() + 1
-    #         assert num_groups == len(
-    #             last_step_advantages
-    #         ), f"number of groups {num_groups} doesn't match the number of trajectories as given by `is_last_step` {len(last_step_advantages)}. The `is_last_step` tensor is likely malformed"
-    #         advantages = last_step_advantages[traj_ids]
-    #         returns = last_step_returns[traj_ids]
-    #     else:
-    #         advantages, returns = ppo_utils.compute_advantages_and_returns(
-    #             token_level_rewards=token_level_rewards,
-    #             response_mask=data["response_mask"],
-    #             index=data.metadata["uids"],
-    #             adv_estimator=self.cfg.trainer.algorithm.advantage_estimator,
-    #             config=self.cfg.trainer.algorithm,
-    #             values=data["values"],
-    #             gamma=self.cfg.trainer.algorithm.gamma,
-    #             lambd=self.cfg.trainer.algorithm.lambd,
-    #             grpo_norm_by_std=self.cfg.trainer.algorithm.grpo_norm_by_std,
-    #         )
-    #     data["returns"] = returns
-    #     data["advantages"] = advantages
+        # sync weights to inference engines
+        with Timer("sync_weights_to_inference_engines"):
+            await self.async_sync_policy_weights_to_inference_engines()
 
-    #     # remove padding while calculating metrics
-    #     pad_size = data.metadata.get("pad_size", 0)
-    #     num_samples = len(token_level_rewards)
+        # Eval before training
+        if self.cfg.trainer.eval_interval > 0 and self.cfg.trainer.eval_before_train:
+            with Timer("eval", self.all_timings):
+                eval_metrics = await self.eval()
+                self.tracker.log(eval_metrics, step=self.global_step)
 
-    #     return_sums = token_level_rewards.sum(dim=-1)[: num_samples - pad_size]
-    #     if self.cfg.trainer.step_wise_training:
-    #         avg_rewards: float = return_sums[data["is_last_step"][: num_samples - pad_size]].mean().item()
-    #     else:
-    #         avg_rewards: float = return_sums.mean().item()
+        # main training loop
+        from tqdm import tqdm
+        pbar = tqdm(total=self.total_training_steps, initial=self.global_step, desc="Training Step Progress")
+        start_epoch = self.global_step // self.num_steps_per_epoch
+        self.global_step += 1  # start training at global_step 1
+        
+        # ✅ KEY CHANGE: Limit epochs to 1 in single-epoch mode
+        end_epoch = start_epoch + 1 if self._single_epoch_mode else self.cfg.trainer.epochs
+        
+        for epoch in range(start_epoch, end_epoch):
+            logger.info(f"[CustomAsyncTrainer] Starting epoch {epoch} (single_epoch_mode={self._single_epoch_mode})")
+            
+            # 0. Per-epoch prologue
+            generation_output_group_buffer = asyncio.Queue[GeneratedOutputGroup](
+                maxsize=self.mini_batch_size * (self.max_staleness_steps + 1)
+            )
 
-    #     avg_response_length = data.metadata["avg_response_length"]
-    #     data = data.to("cpu")
+            generator_tasks = [
+                asyncio.create_task(self._run_generate_for_a_group_loop(generation_output_group_buffer))
+                for _ in range(self.num_parallel_generation_workers)
+            ]
 
-    #     valid_advantages = torch.masked_select(
-    #         data["advantages"][: num_samples - pad_size, ...], data["response_mask"][: num_samples - pad_size].bool()
-    #     )
-    #     avg_advantages: float = valid_advantages.mean().item()
-    #     avg_advantages_abs: float = valid_advantages.abs().mean().item()
+            for _ in range(self.global_step, (1 + epoch) * self.num_steps_per_epoch + 1):
+                with Timer("step", self.all_timings):
+                    # 1. Wait until we have enough groups buffered
+                    cur_generation_group_mini_batch: List[GeneratedOutputGroup] = []
+                    with Timer("wait_for_generation_buffer", self.all_timings):
+                        buffer_pbar = tqdm(
+                            total=self.mini_batch_size,
+                            initial=0,
+                            desc="Generation Buffer Progress",
+                            position=1,
+                        )
+                        while len(cur_generation_group_mini_batch) < self.mini_batch_size:
+                            cur_generation_group_mini_batch.append(await generation_output_group_buffer.get())
+                            buffer_pbar.update(1)
+                            buffer_pbar.set_postfix({"buffer qsize": generation_output_group_buffer.qsize()})
+                        buffer_pbar.close()
 
-    #     if "metrics" not in data.metadata:
-    #         data.metadata["metrics"] = {}
-    #     data.metadata["metrics"].update(
-    #         {
-    #             "avg_final_rewards": avg_rewards,
-    #             "avg_response_length": avg_response_length,
-    #             "avg_advantages": avg_advantages,
-    #             "avg_advantages_abs": avg_advantages_abs,
-    #         }
-    #     )
+                    # 2. Post-process and convert to training format
+                    with Timer("convert_to_training_input", self.all_timings):
+                        training_input = await asyncio.to_thread(
+                            self.convert_generation_group_mini_batch_to_training_input, cur_generation_group_mini_batch
+                        )
 
-    #     logger.info(f"avg_final_rewards: {avg_rewards}, avg_response_length: {avg_response_length}")
-    #     self.all_metrics.update(
-    #         {
-    #             "loss/avg_final_rewards": avg_rewards,
-    #             "loss/avg_raw_advantages": avg_advantages,
-    #             "loss/avg_raw_advantages_abs": avg_advantages_abs,
-    #         }
-    #     )
-    #     return data
+                    # 3. Run training
+                    with Timer("run_training", self.all_timings):
+                        status = await self._run_training(training_input)
+                        await self.async_train_dataloader.mark_consumed_uids(
+                            [g.uid for g in cur_generation_group_mini_batch]
+                        )
+
+                    # 4. Sync weights
+                    with Timer("sync_weights", self.all_timings):
+                        await self.inference_engine_client.pause_generation()
+                        await self.async_sync_policy_weights_to_inference_engines()
+                        await self.inference_engine_client.resume_generation()
+
+                # 5. Logging
+                logger.info(status)
+                self.all_metrics.update({"trainer/epoch": epoch, "trainer/global_step": self.global_step})
+                self.tracker.log(self.all_metrics, step=self.global_step)
+                self.all_metrics = {}
+                pbar.update(1)
+
+                # 6. Eval and checkpointing
+                if self.cfg.trainer.eval_interval > 0 and (
+                    self.global_step % self.cfg.trainer.eval_interval == 0
+                    or self.global_step == self.total_training_steps
+                ):
+                    with Timer("eval", self.all_timings):
+                        eval_metrics = await self.eval()
+                        self.all_metrics.update(eval_metrics)
+                if self.cfg.trainer.ckpt_interval > 0 and self.global_step % self.cfg.trainer.ckpt_interval == 0:
+                    with Timer("save_checkpoints", self.all_timings):
+                        await asyncio.to_thread(self.save_checkpoints)
+                if self.cfg.trainer.hf_save_interval > 0 and self.global_step % self.cfg.trainer.hf_save_interval == 0:
+                    with Timer("save_hf_model", self.all_timings):
+                        await asyncio.to_thread(self.save_models)
+                self.tracker.log({"timing/" + k: v for k, v in self.all_timings.items()}, step=self.global_step)
+                self.all_timings = {}
+                self.global_step += 1
+
+                # 7. Notify capacity change
+                await self._staleness_manager.notify_capacity_change(self.global_step)
+                
+                # ✅ SKIP UID validation in single-epoch mode (will be handled between batches)
+                if not self._single_epoch_mode:
+                    expected_consumed_in_epoch = self.mini_batch_size * ((self.global_step - 1) % self.num_steps_per_epoch)
+                    actual_consumed_in_epoch = len(self.async_train_dataloader.get_consumed_uids_list())
+                    assert actual_consumed_in_epoch == expected_consumed_in_epoch, (
+                        "Unexpected number of consumed data UIDs. Got: "
+                        f"{actual_consumed_in_epoch} != {expected_consumed_in_epoch}"
+                    )
+
+            # 8. Per-epoch epilogue
+            if self.cfg.trainer.update_ref_every_epoch and self.ref_model is not None:
+                with Timer("update_ref_with_policy", self.all_timings):
+                    await asyncio.to_thread(self.update_ref_with_policy)
+
+            # Cancel generator tasks
+            for t in generator_tasks:
+                t.cancel()
+            try:
+                await asyncio.gather(*generator_tasks, return_exceptions=True)
+            except Exception:
+                pass
+
+            # ✅ KEY CHANGE: Skip reset/validation in single-epoch mode
+            if not self._single_epoch_mode:
+                assert all(t.done() for t in generator_tasks), "Generator tasks must be done"
+                assert generation_output_group_buffer.qsize() == 0, "Generation buffer should be empty"
+                await self.async_train_dataloader.reset_at_epoch_end()
+                await self._staleness_manager.validate_state_at_epoch_end(self.global_step)
+            else:
+                logger.info(f"[CustomAsyncTrainer] Epoch {epoch} complete in single-epoch mode, skipping reset/validation")
+                # Just ensure tasks are done
+                assert all(t.done() for t in generator_tasks), "Generator tasks must be done"
+
+        pbar.close()
+        
+        # Final checkpointing
+        if self.cfg.trainer.ckpt_interval > 0:
+            with Timer("save_checkpoints", self.all_timings):
+                await asyncio.to_thread(self.save_checkpoints)
+                logger.info("Saved final checkpoint.")
+        if self.cfg.trainer.hf_save_interval > 0:
+            with Timer("save_hf_model", self.all_timings):
+                await asyncio.to_thread(self.save_models)
+                logger.info("Saved final model.")
+        
+        logger.info(f"[CustomAsyncTrainer] Training complete (single_epoch_mode={self._single_epoch_mode})")

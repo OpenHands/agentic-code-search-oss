@@ -1,8 +1,8 @@
 #!/bin/bash
-#SBATCH --partition=general
+#SBATCH --partition=preempt
 #SBATCH --mem=300Gb
 #SBATCH --cpus-per-task=30
-#SBATCH --gres=gpu:A100_80GB:8
+#SBATCH --gres=gpu:8
 #SBATCH -t 2-00:00:00
 #SBATCH --job-name=rl_qwen3_4b_batched
 #SBATCH --error=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
@@ -19,6 +19,27 @@
 # 3. Clean up indices
 # 4. Move to next batch
 # ============================================================================
+
+# Use a dedicated directory for tmux instead of /tmp
+export TMUX_TMPDIR="/data/user_data/sanidhyv/ray_temp_grep/tmux_sessions"
+mkdir -p "$TMUX_TMPDIR"
+
+# Clean up old tmux sessions and directories
+echo "Cleaning up old tmux sessions..."
+tmux ls 2>/dev/null | grep -v attached | cut -d: -f1 | xargs -I {} tmux kill-session -t {} 2>/dev/null || true
+find "$TMUX_TMPDIR" -type d -name 'tmux-*' -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+
+# Clean up old testbed directories (older than 1 day)
+echo "Cleaning up old testbed directories..."
+find /data/user_data/sanidhyv/tmp -maxdepth 1 -type d -name 'testbed_*' -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+
+# Check disk usage
+echo "Disk usage:"
+df -h /tmp
+df -h /data/user_data/sanidhyv/tmp
+
+# Kill any zombie processes
+pkill -9 -u $(whoami) tmux 2>/dev/null || true
 
 # Cache Configuration
 export UV_CACHE_DIR="/data/user_data/sanidhyv/.cache/uv"
@@ -179,10 +200,10 @@ CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
   +generator.engine_init_kwargs.tool_call_parser=hermes \
   +generator.engine_init_kwargs.reasoning_parser=qwen3 \
   +generator.engine_init_kwargs.max_model_len=16384 \
-  trainer.epochs=20 \
+  trainer.epochs=1 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
-  trainer.eval_interval=100 \
+  trainer.eval_interval=-1 \
   trainer.update_epochs_per_batch=1 \
   trainer.train_batch_size=$TRAIN_BATCH_SIZE \
   trainer.policy_mini_batch_size=$TRAIN_BATCH_SIZE \

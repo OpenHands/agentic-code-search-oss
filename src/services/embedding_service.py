@@ -317,36 +317,66 @@ class EmbeddingService:
         gc.collect()
         print(f"[EmbeddingService] Cleared all loaded indices from memory")
     
-    def cleanup_batch_indices(self, repo_commit_hashes: List[str]):
+    def cleanup_batch_indices(self, repo_hashes: List[str]):
         """
-        Clean up specific indices for a batch.
+        Clean up indices for the given repo hashes.
         
         Args:
-            repo_commit_hashes: List of repo-commit hashes to clean up
+            repo_hashes: List of repository hashes to cleanup
         """
-        cleaned_count = 0
-        freed_mb = 0.0
+        # self.logger.info(f"[EmbeddingService] Cleaning up {len(repo_hashes)} indices")
         
-        for repo_hash in repo_commit_hashes:
-            # Remove from memory cache
-            if repo_hash in self.indices_cache:
-                del self.indices_cache[repo_hash]
-                cleaned_count += 1
-            
-            # Remove from disk
+        for repo_hash in repo_hashes:
             persist_dir = Path(self.cache_dir) / repo_hash
-            if persist_dir.exists():
-                size_mb = self._get_dir_size_mb(persist_dir)
-                shutil.rmtree(persist_dir)
-                freed_mb += size_mb
+            
+            if not persist_dir.exists():
+                # self.logger.warning(f"[EmbeddingService] Index directory not found: {persist_dir}")
+                continue
+            
+            try:
+                # ✅ More robust deletion - handle locked files
+                import time
+                
+                # First attempt: normal removal
+                shutil.rmtree(persist_dir, ignore_errors=False)
+                # self.logger.info(f"[EmbeddingService] ✓ Cleaned up index: {repo_hash}")
+                
+            except OSError as e:
+                if e.errno == 39:  # Directory not empty
+                    # self.logger.warning(f"[EmbeddingService] Directory not empty, trying force delete: {persist_dir}")
+                    try:
+                        # Second attempt: force delete with error handling
+                        def handle_remove_error(func, path, exc_info):
+                            """Error handler for shutil.rmtree"""
+                            import stat
+                            import os
+                            
+                            # Try to change permissions and retry
+                            if not os.access(path, os.W_OK):
+                                os.chmod(path, stat.S_IWUSR)
+                                try:
+                                    func(path)
+                                except Exception:
+                                    pass  # Ignore if still fails
+                        
+                        shutil.rmtree(persist_dir, onerror=handle_remove_error)
+                        # self.logger.info(f"[EmbeddingService] ✓ Force-cleaned index: {repo_hash}")
+                        
+                    except Exception as e2:
+                        pass
+                        # self.logger.warning(f"[EmbeddingService] Could not fully delete {persist_dir}: {e2}")
+                        # self.logger.warning(f"[EmbeddingService] This is non-fatal - continuing anyway")
+                else:
+                    pass
+                    # self.logger.warning(f"[EmbeddingService] Error cleaning up {persist_dir}: {e}")
+                    # self.logger.warning(f"[EmbeddingService] This is non-fatal - continuing anyway")
+            
+            except Exception as e:
+                pass
+                # self.logger.warning(f"[EmbeddingService] Unexpected error cleaning up {persist_dir}: {e}")
+                # self.logger.warning(f"[EmbeddingService] This is non-fatal - continuing anyway")
         
-        # Force garbage collection
-        gc.collect()
-        
-        print(
-            f"[EmbeddingService] Cleaned batch: "
-            f"{cleaned_count} indices, {freed_mb:.1f} MB freed"
-        )
+        # self.logger.info(f"[EmbeddingService] Cleanup complete")
 
     def get_or_load_index(self, repo_name: str, commit: str, repo_path: Optional[str] = None) -> SemanticSearch:
         """
@@ -508,9 +538,20 @@ class EmbeddingWorker:
     """Parallel indexing worker that uses a fraction of GPU."""
     
     def __init__(self, worker_id: int, embedding_model: str, cache_dir: str, num_threads: int = 4):
+
         import torch
         from pathlib import Path
-        
+        from loguru import logger  # Import logger here
+        import sys
+        self.logger = logger.bind(worker_id=worker_id)
+        # Configure logger for this worker
+        logger.remove()  # Remove default handler
+        logger.add(
+            sys.stderr,
+            format="<green>{time:YYYY-MM-DD HH:mm:ss}</green> | <level>{level: <8}</level> | <cyan>Worker-{extra[worker_id]}</cyan> | <level>{message}</level>",
+            level="INFO"
+        )
+        logger.configure(extra={"worker_id": worker_id})
         self.worker_id = worker_id
         self.cache_dir = Path(cache_dir)
         
@@ -549,6 +590,7 @@ class EmbeddingWorker:
             torch.set_num_threads(num_threads)
         
         print(f"[Worker {worker_id}] ✓ Ready on {device}")
+        self.logger.info(f"Initialized on {device}")
     
     def index_repo(self, repo_name: str, commit: str, repo_path: str) -> dict:
         """Index a single repository."""
@@ -559,7 +601,7 @@ class EmbeddingWorker:
         from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
         
         try:
-            print(f"\n[Worker {self.worker_id}] 🔨 Starting indexing: {repo_name}@{commit[:7]}")
+            self.logger.info(f"🔨 Starting indexing: {repo_name}@{commit[:7]}")
             
             device_type = self.embedder.device.type
             print(f"[Worker {self.worker_id}]   Device: {device_type}")
@@ -629,26 +671,24 @@ class EmbeddingWorker:
             print(f"[Worker {self.worker_id}]   Creating .ready marker...")
             print(f"[Worker {self.worker_id}]   Ready file path: {ready_file}")
             print(f"[Worker {self.worker_id}]   Ready file parent exists: {ready_file.parent.exists()}")
-            
+            self.logger.info("Creating .ready marker...")
             # Create the .ready file
             ready_file.touch()
+            import os
+            os.sync()  # Force kernel to flush buffers to disk
+            time.sleep(0.5)
             
             # ✅ VERIFY IT WAS CREATED
             if ready_file.exists():
                 print(f"[Worker {self.worker_id}]   ✓✓✓ .ready marker CREATED and VERIFIED")
-                # Double-check file system sync
-                import os
-                os.sync()
-                # Verify again after sync
-                if ready_file.exists():
-                    print(f"[Worker {self.worker_id}]   ✓✓✓ .ready marker still exists after sync")
-                else:
-                    print(f"[Worker {self.worker_id}]   ✗✗✗ .ready marker DISAPPEARED after sync!")
+                self.logger.info("✓✓✓ .ready marker CREATED and VERIFIED")
+                # Double-check with explicit open/close to force flush
+                with open(ready_file, 'a') as f:
+                    f.flush()
+                    os.fsync(f.fileno())  # Force flush to disk
             else:
                 print(f"[Worker {self.worker_id}]   ✗✗✗ WARNING: .ready marker NOT created!")
-                # Try to debug why
-                print(f"[Worker {self.worker_id}]   Index path writable: {os.access(str(index_path), os.W_OK)}")
-                
+                self.logger.warning("✗✗✗ WARNING: .ready marker NOT created!")
             if device_type == "cuda":
                 after_mem = torch.cuda.memory_allocated(gpu_id) / 1024**3
                 mem_used = after_mem - before_mem
