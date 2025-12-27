@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 
 def clone_instance(
-    repo_name: str, commit_id: str, instance_id: str, output_dir: Path
+    repo_name: str, commit_id: str, instance_id: str, output_dir: Path, patch: str | None = None
 ) -> bool:
     """
     Clone a repository at a specific commit into a separate directory.
@@ -52,6 +52,18 @@ def clone_instance(
             capture_output=True,
             text=True,
         )
+
+        # For datasets such as SWE-Smith,
+        # The task is actually a patch to be applied to the codebase.
+        if patch is not None:
+            # Apply the patch
+            subprocess.run(
+                ["git", "-C", str(instance_path), "apply"],
+                input=patch,
+                check=True,
+                capture_output=True,
+                text=True,
+            )
 
         print(f"  ✓ Cloned {instance_id} at commit {commit_id[:8]}")
         return True, instance_path
