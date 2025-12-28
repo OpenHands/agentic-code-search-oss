@@ -95,7 +95,7 @@ REPOS_DIR="/data/user_data/sanidhyv/grep"  # Where repos are cloned
 N_ROLLOUTS="${N_ROLLOUTS:-8}"
 TRAIN_BATCH_SIZE=4
 MAX_LENGTH=2048
-export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
+export WANDB_API_KEY=""
 export WANDB_PROJECT="code_search_50"
 
 # Resource allocation
