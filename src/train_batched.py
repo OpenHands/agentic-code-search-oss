@@ -1,18 +1,8 @@
 """
 Batched training script for code search with two-phase GPU/CPU indexing.
 
-This script extends the base PPO training with support for batched repository indexing,
-allowing training on large datasets without running out of GPU memory or disk space.
-
-Key features:
-- Two-phase indexing: GPU for fast embedding creation, CPU for retrieval during training
-- Batch processing: Index N repos at a time, train, then cleanup
-- Memory efficient: Embeddings and training never compete for GPU
-- Automatic cleanup: Remove old indices to free disk space
-
-Usage:
-    python src/train_batched.py --config-name batched_indexing
-    sbatch scripts/train_with_batched_indexing.sh
+Simplified approach: Index → Train → Cleanup → Repeat
+No custom trainer needed - just manage batches externally.
 """
 
 import hydra
@@ -28,62 +18,43 @@ from loguru import logger
 from typing import List, Dict, Any, Optional
 
 from skyrl_train.entrypoints.main_base import BasePPOExp, config_dir, validate_cfg
-
 from src.services.batched_index_manager import BatchedIndexManager
-
-# NOTE: These imports assume the following files exist in your codebase:
-# - src/generator/code_search_generator.py (from your existing code)
-# - src/async_trainer.py (from your existing code)
-# If running this fails, ensure these files are present
+from src.services.batch_state_manager import BatchStateManager
 try:
     from src.generator.code_search_generator import CodeSearchGenerator
     from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
 except ImportError as e:
     logger.error(f"Could not import required modules: {e}")
-    logger.error("Please ensure src/generator/code_search_generator.py and src/async_trainer.py exist")
     raise
 
 
 class BatchedCodeSearchPPOExp(BasePPOExp):
-    """Extended experiment class with two-phase batched indexing."""
+    """Extended experiment class with batched indexing - NO custom trainer needed."""
     
     def __init__(self, cfg: DictConfig):
         self.batch_manager: Optional[BatchedIndexManager] = None
         self.embedding_service = None
         self.current_batch_dataset = None
+        self.batch_state_manager: Optional[BatchStateManager] = None
         self._batched_mode = cfg.get("batched_indexing", {}).get("enabled", False)
         self._shared_tracker = None
+        
         super().__init__(cfg)
         
-        # After parent init, load full dataset for batch manager
         if self._batched_mode and (not hasattr(self, 'train_ds') or self.train_ds is None):
             logger.info("[Init] Loading full dataset for batch manager...")
             self._load_dataset()
+    
     def get_tracker(self):
-        """
-        Override to reuse tracker across batches in batched mode.
-        
-        In batched training, we create one tracker for all batches.
-        Otherwise, use parent's behavior.
-        """
+        """Reuse tracker across batches."""
         if self._batched_mode and hasattr(self, '_shared_tracker') and self._shared_tracker is not None:
-            logger.info("[get_tracker] Reusing shared tracker for batched training")
             return self._shared_tracker
         else:
-            # Normal behavior: create new tracker
             return super().get_tracker()
-    def get_trainer(
-        self,
-        cfg,
-        tracker,
-        tokenizer,
-        train_dataset,
-        eval_dataset,
-        inference_engine_client,
-        generator,
-        colocate_pg,
-    ):
-        """Get the async trainer - CRITICAL for reward tracking!"""
+    
+    def get_trainer(self, cfg, tracker, tokenizer, train_dataset, eval_dataset, 
+                    inference_engine_client, generator, colocate_pg):
+        """Use base FullyAsyncRayPPOTrainer - no customization needed!"""
         return FullyAsyncRayPPOTrainer(
             cfg=cfg,
             tracker=tracker,
@@ -96,107 +67,18 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
         )
     
     def _load_dataset(self):
-        """Load training dataset if not already loaded by parent."""
+        """Load training dataset if not already loaded."""
         if hasattr(self, 'train_ds') and self.train_ds is not None:
-            logger.info(f"[Init] Dataset already loaded: {len(self.train_ds)} samples")
             return
         
-        # Load from config
         train_data_paths = self.cfg.data.train_data
-        logger.info(f"[Init] Loading dataset from: {train_data_paths}")
-        
         datasets = []
         for path in train_data_paths:
-            logger.info(f"[Init] Loading: {path}")
             ds = load_dataset("parquet", data_files=path, split="train")
             datasets.append(ds)
         
-        if len(datasets) == 1:
-            self.train_ds = datasets[0]
-        else:
-            self.train_ds = concatenate_datasets(datasets)
-        
-        logger.info(f"[Init] ✓ Loaded {len(self.train_ds)} training samples")
-
-    def _setup_trainer(self):
-        """Override to inject batch dataset before trainer initialization."""
-        if self._batched_mode and self.current_batch_dataset is not None:
-            from skyrl_train.dataset import PromptDataset
-            from skyrl_train.utils.trainer_utils import build_dataloader
-            
-            batch_idx = getattr(self, '_current_batch_idx', 0)
-            logger.info(f"[_setup_trainer] Injecting batch {batch_idx} dataset: {len(self.current_batch_dataset)} instances")
-            
-            # Validate dataset structure
-            if len(self.current_batch_dataset) > 0:
-                first_item = self.current_batch_dataset[0]
-                if "prompt" not in first_item:
-                    raise ValueError(
-                        f"Batch dataset missing 'prompt' key. "
-                        f"Available keys: {list(first_item.keys())}"
-                    )
-            
-            # Create PromptDataset wrapper without file loading
-            prompts_dataset = object.__new__(PromptDataset)
-            prompts_dataset.tokenizer = self.tokenizer
-            prompts_dataset.max_prompt_length = self.cfg.trainer.max_prompt_length
-            prompts_dataset.prompt_key = "prompt"
-            prompts_dataset.env_class_key = "env_class"
-            prompts_dataset.num_workers = 8
-            prompts_dataset.datasets = None
-            prompts_dataset.dataframe = self.current_batch_dataset
-            
-            # Replace the dataset
-            self.train_dataset = prompts_dataset
-            
-            logger.info(f"[_setup_trainer] ✓ Batch {batch_idx} dataset ready: {len(prompts_dataset)} instances")
-            
-            assert len(prompts_dataset) >= self.cfg.trainer.train_batch_size, \
-                f"Batch too small: {len(prompts_dataset)} < {self.cfg.trainer.train_batch_size}"
-        
-        # Create the trainer (will use shared tracker via get_tracker() override)
-        trainer = super()._setup_trainer()
-        
-        # ✅ Rebuild the dataloader with the new batch dataset
-        if self._batched_mode and self.current_batch_dataset is not None:
-            batch_idx = getattr(self, '_current_batch_idx', 0)
-            
-            logger.info(f"[_setup_trainer] Rebuilding dataloader for batch {batch_idx}")
-            
-            # Rebuild dataloader
-            trainer.train_dataloader = build_dataloader(
-                self.cfg, 
-                trainer.train_dataset, 
-                is_train=True, 
-                is_fully_async=True
-            )
-            
-            # Update async dataloader wrapper
-            trainer.async_train_dataloader._train_dataloader = trainer.train_dataloader
-            trainer.async_train_dataloader._train_dataloader_initial_state = trainer.train_dataloader.state_dict()
-            trainer.async_train_dataloader._effective_dataloader_length = (
-                len(trainer.train_dataloader) // trainer.mini_batch_size * trainer.mini_batch_size
-            )
-            trainer.async_train_dataloader._iter = enumerate(trainer.train_dataloader)
-            
-            # Update epoch/step calculations
-            trainer.num_steps_per_epoch = len(trainer.train_dataloader) // trainer.mini_batch_size
-            trainer.total_training_steps = trainer.num_steps_per_epoch * self.cfg.trainer.epochs
-            
-            # Enable single-epoch mode for batched training
-            trainer.enable_single_epoch_mode()
-            
-            logger.info(f"[_setup_trainer] ✓ Dataloader rebuilt:")
-            logger.info(f"  - Batches per epoch: {trainer.num_steps_per_epoch}")
-            logger.info(f"  - Epochs: {self.cfg.trainer.epochs}")
-            logger.info(f"  - Total training steps: {trainer.total_training_steps}")
-            
-            # ✅ Log batch info to WandB (without changing run name)
-            if hasattr(trainer, 'tracker') and trainer.tracker is not None:
-                trainer.tracker.log({'batch/current_batch': batch_idx}, step=trainer.global_step)
-                logger.info(f"[_setup_trainer] ✓ Logged batch {batch_idx} to WandB")
-        
-        return trainer
+        self.train_ds = concatenate_datasets(datasets) if len(datasets) > 1 else datasets[0]
+        logger.info(f"[Init] Loaded {len(self.train_ds)} training samples")
     
     def get_generator(self, cfg, tokenizer, inference_engine_client):
         """Initialize CodeSearchGenerator with semantic search support."""
@@ -204,9 +86,9 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             'enabled': True,
             'embedding_model': 'jinaai/jina-code-embeddings-0.5b',
             'reranker_model': None,
-            'max_indices': 15
+            'max_indices': 50
         }))
-        generator = CodeSearchGenerator(
+        return CodeSearchGenerator(
             model_name=cfg.trainer.policy.model.path,
             generator_cfg=cfg.generator,
             semantic_search_cfg=semantic_search_cfg,
@@ -214,14 +96,15 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             tokenizer=tokenizer,
             inference_engine_client=inference_engine_client,
         )
-        return generator
     
     def setup_batched_indexing(self):
         """
-        Initialize batched indexing components.
+        Initialize batched indexing components with state management.
         
-        Creates the EmbeddingService actor that will be used throughout training.
-        Must be called after dataset is loaded.
+        Creates:
+        - BatchManager for dataset organization
+        - BatchStateManager for checkpoint/resume support
+        - EmbeddingService actor for CPU retrieval
         """
         if not self.cfg.get("batched_indexing", {}).get("enabled", False):
             logger.info("[Batched] Batched indexing disabled, using regular training")
@@ -251,7 +134,24 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             commit_field=batch_config.get("commit_field", "base_commit"),
         )
         
-        # 2. Initialize EmbeddingService actor (CRITICAL!)
+        logger.info(f"[Batched] Total batches: {self.batch_manager.num_batches}")
+        logger.info(f"[Batched] Batch size: {batch_config.batch_size} repos/batch")
+        logger.info(f"[Batched] Cache dir: {batch_config.cache_dir}")
+        logger.info(f"[Batched] Repos dir: {batch_config.repos_dir}")
+        
+        # 2. Initialize batch state manager for checkpointing/resume
+        from src.services.batch_state_manager import BatchStateManager
+        
+        state_file = Path(self.cfg.trainer.ckpt_path) / "batch_state.json"
+        self.batch_state_manager = BatchStateManager(
+            state_file=state_file,
+            total_batches=self.batch_manager.num_batches
+        )
+        
+        # Print current progress
+        self.batch_state_manager.print_summary()
+        
+        # 3. Initialize EmbeddingService actor (for retrieval during training)
         from src.services.embedding_service import EmbeddingService
         
         semantic_config = self.cfg.get("semantic_search", {})
@@ -271,7 +171,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
         self.embedding_service = EmbeddingService.options(
             name="embedding_service",  # Named actor for global access
             num_cpus=4,  # CPU cores for processing
-            num_gpus=0,  # Don't reserve GPU - will borrow temporarily during indexing
+            num_gpus=0,  # Don't reserve GPU - will use CPU for retrieval
             lifetime="detached",  # Keep alive across batches
             max_restarts=-1,  # Auto-restart on failure
             max_task_retries=-1  # Retry failed tasks
@@ -279,7 +179,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             embedding_model=semantic_config.get("embedding_model", "jinaai/jina-code-embeddings-0.5b"),
             reranker_model=semantic_config.get("reranker_model"),
             cache_dir=batch_config.cache_dir,
-            max_indices=semantic_config.get("max_indices", 15),
+            max_indices=semantic_config.get("max_indices", 50),
         )
         
         # Verify actor is accessible
@@ -290,21 +190,10 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             logger.error(f"[Batched] ✗ Failed to verify embedding_service actor: {e}")
             raise
         
-        logger.info(f"[Batched] Total batches: {self.batch_manager.num_batches}")
-        logger.info(f"[Batched] Batch size: {batch_config.batch_size} repos/batch")
-        logger.info(f"[Batched] Cache dir: {batch_config.cache_dir}")
-        logger.info(f"[Batched] Repos dir: {batch_config.repos_dir}")
+        logger.info("[Batched] ✓ Batched indexing setup complete\n")
     
     def clone_batch_repos(self, batch_repos: List[tuple]) -> tuple[List[tuple], List[tuple]]:
-        """
-        Clone repositories for a batch.
-        
-        Args:
-            batch_repos: List of (repo_name, commit) tuples to clone
-            
-        Returns:
-            (successful_clones, failed_clones) where each is a list of (repo_name, commit, [error])
-        """
+        """Clone repositories for a batch."""
         logger.info(f"[Cloning] Starting clone for {len(batch_repos)} repositories...")
         
         repos_dir = Path(self.cfg.batched_indexing.repos_dir)
@@ -314,705 +203,599 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
         failed = []
         
         for repo_name, commit in batch_repos:
-            logger.info(f"[Cloning] Processing {repo_name}@{commit[:7]}")
-            
-            # Create directory name: owner__repo__{commit[:8]}
             dir_name = f"{repo_name.replace('/', '__')}__{commit[:8]}"
             repo_path = repos_dir / dir_name
             
-            # Check if already cloned
+            # Check if already cloned at correct commit
             if repo_path.exists() and (repo_path / ".git").exists():
-                # Verify it's at the right commit
                 try:
                     result = subprocess.run(
                         ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
-                        capture_output=True,
-                        text=True,
-                        check=True,
-                        timeout=10
+                        capture_output=True, text=True, check=True, timeout=10
                     )
-                    actual_commit = result.stdout.strip()
-                    
-                    if actual_commit == commit:
+                    if result.stdout.strip() == commit:
                         logger.info(f"[Cloning] ✓ {repo_name}@{commit[:7]} already cloned")
                         successful.append((repo_name, commit))
                         continue
-                    else:
-                        logger.warning(f"[Cloning] Commit mismatch for {repo_name}, re-cloning")
-                        shutil.rmtree(repo_path)
-                except Exception as e:
-                    logger.warning(f"[Cloning] Could not verify commit for {repo_name}: {e}")
+                    shutil.rmtree(repo_path)
+                except:
                     shutil.rmtree(repo_path)
             
-            # Clone the repository
+            # Clone
             try:
-                logger.info(f"[Cloning] Cloning {repo_name} to {repo_path}")
-                
-                # Clone with depth 1 for speed
                 subprocess.run(
-                    [
-                        "git", "clone",
-                        "--quiet",
-                        f"https://github.com/{repo_name}.git",
-                        str(repo_path)
-                    ],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=300  # 5 minute timeout
+                    ["git", "clone", "--quiet", f"https://github.com/{repo_name}.git", str(repo_path)],
+                    check=True, capture_output=True, timeout=300
                 )
-                
-                # Checkout the specific commit
-                logger.info(f"[Cloning] Checking out commit {commit[:7]}")
                 subprocess.run(
                     ["git", "-C", str(repo_path), "checkout", "--quiet", commit],
-                    check=True,
-                    capture_output=True,
-                    text=True,
-                    timeout=60
+                    check=True, capture_output=True, timeout=60
                 )
                 
-                # Verify checkout
-                result = subprocess.run(
-                    ["git", "-C", str(repo_path), "rev-parse", "HEAD"],
-                    capture_output=True,
-                    text=True,
-                    check=True,
-                    timeout=10
-                )
-                actual_commit = result.stdout.strip()
-                
-                if actual_commit != commit:
-                    raise RuntimeError(
-                        f"Checkout verification failed: expected {commit}, got {actual_commit}"
-                    )
-                
-                logger.info(f"[Cloning] ✓ Successfully cloned {repo_name}@{commit[:7]}")
+                logger.info(f"[Cloning] ✓ {repo_name}@{commit[:7]}")
                 successful.append((repo_name, commit))
                 
-            except subprocess.TimeoutExpired as e:
-                error_msg = f"Timeout after {e.timeout}s"
-                logger.error(f"[Cloning] ✗ {error_msg}")
-                failed.append((repo_name, commit, error_msg))
-                
-                if repo_path.exists():
-                    shutil.rmtree(repo_path, ignore_errors=True)
-                    
-            except subprocess.CalledProcessError as e:
-                error_msg = f"Git error: {e.stderr if e.stderr else str(e)}"
-                logger.error(f"[Cloning] ✗ {error_msg}")
-                failed.append((repo_name, commit, error_msg))
-                
-                if repo_path.exists():
-                    shutil.rmtree(repo_path, ignore_errors=True)
-                    
             except Exception as e:
-                error_msg = str(e)
-                logger.error(f"[Cloning] ✗ Unexpected error: {error_msg}")
-                failed.append((repo_name, commit, error_msg))
-                
+                logger.error(f"[Cloning] ✗ {repo_name}@{commit[:7]}: {e}")
+                failed.append((repo_name, commit, str(e)))
                 if repo_path.exists():
                     shutil.rmtree(repo_path, ignore_errors=True)
         
-        # Report results
-        logger.info("\n" + "="*80)
-        logger.info(f"[Cloning] Batch cloning complete")
-        logger.info(f"  Successful: {len(successful)}/{len(batch_repos)}")
-        logger.info(f"  Failed:     {len(failed)}/{len(batch_repos)}")
-        logger.info("="*80)
-        
-        if failed:
-            logger.warning(f"\n[Cloning] Failed to clone {len(failed)} repositories:")
-            for repo_name, commit, error in failed:
-                logger.warning(f"  ✗ {repo_name}@{commit[:7]}: {error}")
-        
+        logger.info(f"[Cloning] Complete: {len(successful)}/{len(batch_repos)} successful")
         return successful, failed
-
-    def index_batch_repos_parallel(self, batch_repos: List[tuple], max_retries: int = 2, num_workers: int = 4):
+    
+    def run_batch(self, batch_idx: int):
         """
-        Index a batch of repositories in parallel using Ray tasks.
+        Run training for a single batch with full state tracking.
+        
+        Phases:
+        0. Clone repositories
+        1. Index on GPU (parallel workers)
+        2. Setup CPU retrieval
+        3. Prepare training dataset
+        4. Train (new trainer per batch)
+        5. Cleanup
         
         Args:
-            batch_repos: List of (repo_name, commit) tuples to index
-            max_retries: Number of times to retry failed indices
-            num_workers: Number of parallel indexing workers
+            batch_idx: Index of batch to process (0-indexed)
         """
-        logger.info(f"[Indexing] Starting PARALLEL indexing for {len(batch_repos)} repositories with {num_workers} workers...")
-        
-        repos_dir = Path(self.cfg.batched_indexing.repos_dir)
-        cache_dir = Path(self.cfg.batched_indexing.cache_dir)
-        
-        # Get embedding service actor
-        try:
-            embedding_service = ray.get_actor("embedding_service")
-        except ValueError as e:
-            logger.error("[Indexing] embedding_service actor not found!")
-            raise
-        
-        # Enter indexing phase (models on GPU)
-        logger.info("[Indexing] Entering GPU indexing phase...")
-        ray.get(embedding_service.enter_indexing_phase.remote())
-        
-        # Define indexing task
-        @ray.remote(num_cpus=2)
-        def index_single_repo(repo_name: str, commit: str, repos_dir: str, cache_dir: str, max_retries: int):
-            """Index a single repository with retry logic."""
-            import time
-            import shutil
-            from pathlib import Path
-            from loguru import logger
-            
-            from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
-            
-            repos_dir = Path(repos_dir)
-            cache_dir = Path(cache_dir)
-            
-            repo_commit_hash = get_repo_commit_hash(repo_name, commit)
-            
-            # Find the cloned repo directory
-            dir_name = f"{repo_name.replace('/', '__')}__{commit[:8]}"
-            repo_path = repos_dir / dir_name
-            
-            if not repo_path.exists() or not repo_path.is_dir():
-                return {
-                    'success': False,
-                    'repo_name': repo_name,
-                    'commit': commit,
-                    'error': "Repository not cloned"
-                }
-            
-            # Check if already indexed
-            index_path = cache_dir / repo_commit_hash
-            ready_file = index_path / ".ready"
-            
-            if ready_file.exists():
-                return {
-                    'success': True,
-                    'repo_name': repo_name,
-                    'commit': commit,
-                    'cached': True
-                }
-            
-            # Try indexing with retries
-            for attempt in range(max_retries):
-                try:
-                    # Get embedding service actor
-                    embedding_service = ray.get_actor("embedding_service")
-                    
-                    # Call embedding service to index
-                    ray.get(embedding_service.get_or_load_index.remote(
-                        repo_name=repo_name,
-                        commit=commit,
-                        repo_path=str(repo_path)
-                    ))
-                    
-                    # Verify .ready marker was created
-                    if ready_file.exists():
-                        return {
-                            'success': True,
-                            'repo_name': repo_name,
-                            'commit': commit,
-                            'cached': False,
-                            'attempts': attempt + 1
-                        }
-                    else:
-                        last_error = "Missing .ready marker"
-                        
-                except Exception as e:
-                    last_error = str(e)
-                    
-                    # Clean up partial index before retry
-                    if index_path.exists():
-                        shutil.rmtree(index_path, ignore_errors=True)
-                    
-                    # Wait before retry
-                    if attempt < max_retries - 1:
-                        time.sleep(5)
-            
-            return {
-                'success': False,
-                'repo_name': repo_name,
-                'commit': commit,
-                'error': last_error,
-                'attempts': max_retries
-            }
-        
-        # Launch parallel indexing tasks
-        logger.info(f"[Indexing] Launching {len(batch_repos)} parallel indexing tasks...")
-        
-        futures = []
-        for repo_name, commit in batch_repos:
-            future = index_single_repo.remote(
-                repo_name, commit, str(repos_dir), str(cache_dir), max_retries
-            )
-            futures.append(future)
-        
-        # Wait for all tasks to complete with progress
-        from tqdm import tqdm
-        results = []
-        
-        with tqdm(total=len(futures), desc="Indexing repos") as pbar:
-            while futures:
-                # Wait for next task to complete
-                done, futures = ray.wait(futures, num_returns=1, timeout=1.0)
-                
-                for done_future in done:
-                    result = ray.get(done_future)
-                    results.append(result)
-                    pbar.update(1)
-                    
-                    if result['success']:
-                        cached = result.get('cached', False)
-                        status = "cached" if cached else "indexed"
-                        logger.info(f"[Indexing] ✓ {result['repo_name']}@{result['commit'][:7]} ({status})")
-                    else:
-                        logger.error(f"[Indexing] ✗ {result['repo_name']}@{result['commit'][:7]}: {result['error']}")
-        
-        # Separate successful and failed
-        successful = [(r['repo_name'], r['commit']) for r in results if r['success']]
-        failed = [(r['repo_name'], r['commit'], r['error']) for r in results if not r['success']]
-        
-        # Get indexing stats
-        try:
-            stats = ray.get(embedding_service.get_cache_stats.remote())
-            logger.info(f"[Indexing] Cache stats: {stats}")
-        except Exception as e:
-            logger.warning(f"[Indexing] Could not get cache stats: {e}")
-            stats = {"loaded_indices": "unknown"}
-        
-        # Report results
-        logger.info("\n" + "="*80)
-        logger.info(f"[Indexing] Parallel batch indexing complete")
-        logger.info(f"  Successful: {len(successful)}/{len(batch_repos)}")
-        logger.info(f"  Failed:     {len(failed)}/{len(batch_repos)}")
-        if isinstance(stats.get('loaded_indices'), int):
-            logger.info(f"  Active indices: {stats['loaded_indices']}")
-        logger.info("="*80)
-        
-        if failed:
-            logger.warning(f"\n[Indexing] Failed to index {len(failed)} repositories:")
-            for repo_name, commit, error in failed:
-                logger.warning(f"  ✗ {repo_name}@{commit[:7]}: {error}")
-        
-        return successful, failed
-
-    def run_batch(self, batch_idx: int):
-        """Run training for a single batch of repositories."""
         from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
         
         logger.info(f"\n{'='*80}")
         logger.info(f"[Batch {batch_idx}/{self.batch_manager.num_batches-1}] Starting...")
         logger.info(f"{'='*80}")
         
-        batch_repos = self.batch_manager.get_batch_repos(batch_idx)
-        logger.info(f"[Batch {batch_idx}] Repos in batch: {[f'{r}@{c[:7]}' for r, c in batch_repos]}")
-        
-        # ✅ CRITICAL: If this is not batch 0, force cleanup of previous training state
-        if batch_idx > 0:
-            logger.info(f"[Batch {batch_idx}] Releasing previous batch's training resources...")
-            
-            # Force garbage collection
-            import gc
-            import torch
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-            
-            # Give Ray time to cleanup
-            import time
-            time.sleep(5)
-            
-            # Log available resources
-            try:
-                available = ray.available_resources()
-                logger.info(f"[Batch {batch_idx}] Available before indexing: GPU={available.get('GPU', 0):.1f}, CPU={available.get('CPU', 0):.1f}")
-            except:
-                pass
-        
-        # Phase 0: CLONING
-        logger.info(f"[Batch {batch_idx}] Phase 0: Cloning repositories...")
-        successful_clones, failed_clones = self.clone_batch_repos(batch_repos)
-        
-        if not successful_clones:
-            logger.error(f"[Batch {batch_idx}] ✗ No repositories were successfully cloned!")
-            raise RuntimeError(f"Batch {batch_idx} failed - no repos cloned")
-        
-        # Phase 1: INDEXING (GPU)
-        logger.info(f"[Batch {batch_idx}] Phase 1: Indexing on GPU (parallel)...")
-        
-        from src.services.embedding_service import EmbeddingWorker
-        
-        num_workers = self.cfg.batched_indexing.get("num_index_workers", 4)
-        semantic_config = self.cfg.get("semantic_search", {})
-        
-        workers = []
-        results = []
-        errors = []
-        futures = []
-        task_mapping = {}
+        # ✅ Mark batch as started in state manager
+        self.batch_state_manager.start_batch(batch_idx)
         
         try:
-            # ✅ Check GPU availability BEFORE creating workers
-            available = ray.available_resources()
-            available_gpus = available.get('GPU', 0)
-            logger.info(f"[Batch {batch_idx}] Available GPUs before worker creation: {available_gpus}")
+            batch_repos = self.batch_manager.get_batch_repos(batch_idx)
+            logger.info(f"[Batch {batch_idx}] Repos in batch: {len(batch_repos)}")
             
-            if available_gpus < 0.5:  # Need at least 0.5 GPU total
-                logger.error(f"[Batch {batch_idx}] ✗ Insufficient GPU resources: {available_gpus} GPUs available")
-                logger.error(f"[Batch {batch_idx}] Waiting 30s for GPU cleanup...")
-                import time
-                time.sleep(30)
-                
-                available = ray.available_resources()
-                available_gpus = available.get('GPU', 0)
-                logger.info(f"[Batch {batch_idx}] GPUs after wait: {available_gpus}")
-                
-                if available_gpus < 0.5:
-                    raise RuntimeError(f"Cannot create indexing workers - only {available_gpus} GPUs available")
+            # ===================================================================
+            # PHASE 0: CLONING
+            # ===================================================================
+            logger.info(f"[Batch {batch_idx}] Phase 0: Cloning repositories...")
+            successful_clones, failed_clones = self.clone_batch_repos(batch_repos)
             
-            # Create workers
-            logger.info(f"[Batch {batch_idx}] Creating {num_workers} GPU workers...")
-            workers = [
-                EmbeddingWorker.remote(
-                    worker_id=i,
-                    embedding_model=semantic_config.get("embedding_model", "jinaai/jina-code-embeddings-0.5b"),
-                    cache_dir=str(self.cfg.batched_indexing.cache_dir),
-                )
-                for i in range(num_workers)
+            if not successful_clones:
+                error_msg = f"No repositories were successfully cloned (0/{len(batch_repos)})"
+                logger.error(f"[Batch {batch_idx}] ✗ {error_msg}")
+                if failed_clones:
+                    logger.error(f"[Batch {batch_idx}] Clone failures:")
+                    for repo_name, commit, error in failed_clones:
+                        logger.error(f"  - {repo_name}@{commit[:7]}: {error}")
+                raise RuntimeError(error_msg)
+            
+            logger.info(f"[Batch {batch_idx}] ✓ Cloned {len(successful_clones)}/{len(batch_repos)} repos")
+            repos_to_index = successful_clones
+            
+            # ===================================================================
+            # PHASE 1: INDEXING (GPU) - Parallel Workers
+            # ===================================================================
+            logger.info(f"[Batch {batch_idx}] Phase 1: Indexing on GPU (parallel)...")
+            
+            from src.services.embedding_service import EmbeddingWorker
+            
+            num_workers = self.cfg.batched_indexing.get("num_index_workers", 4)
+            semantic_config = self.cfg.get("semantic_search", {})
+            repos_dir = Path(self.cfg.batched_indexing.repos_dir)
+            
+            workers = []
+            futures = []
+            task_mapping = {}
+            results = []
+            errors = []
+            
+            try:
+                # Create GPU workers
+                logger.info(f"[Batch {batch_idx}] Creating {num_workers} GPU indexing workers...")
+                workers = [
+                    EmbeddingWorker.remote(
+                        worker_id=i,
+                        embedding_model=semantic_config.get("embedding_model", "jinaai/jina-code-embeddings-0.5b"),
+                        cache_dir=str(self.cfg.batched_indexing.cache_dir),
+                    )
+                    for i in range(num_workers)
+                ]
+                
+                logger.info(f"[Batch {batch_idx}] ✓ Created {num_workers} GPU workers")
+                
+                # Distribute indexing tasks across workers
+                for i, (repo_name, commit) in enumerate(repos_to_index):
+                    # Find repo path
+                    dir_name = f"{repo_name.replace('/', '__')}__{commit[:8]}"
+                    repo_path = repos_dir / dir_name
+                    
+                    if not repo_path.exists():
+                        logger.warning(f"[Batch {batch_idx}] Repo not found: {repo_path}")
+                        errors.append((repo_name, commit, "Repo directory not found"))
+                        continue
+                    
+                    # Assign to worker (round-robin)
+                    worker = workers[i % num_workers]
+                    future = worker.index_repo.remote(repo_name, commit, str(repo_path))
+                    futures.append(future)
+                    task_mapping[future] = (repo_name, commit)
+                
+                logger.info(f"[Batch {batch_idx}] Launched {len(futures)} indexing tasks")
+                
+                if len(futures) == 0:
+                    raise RuntimeError(f"No indexing tasks were launched!")
+                
+                # Wait for completion with timeout and progress tracking
+                from tqdm import tqdm
+                
+                indexing_start_time = time.time()
+                max_indexing_time = 1800  # 30 minutes max
+                last_progress_time = time.time()
+                last_progress_count = 0
+                
+                with tqdm(total=len(futures), desc="Indexing repos") as pbar:
+                    remaining_futures = list(futures)
+                    
+                    while remaining_futures:
+                        # Check global timeout
+                        elapsed = time.time() - indexing_start_time
+                        if elapsed > max_indexing_time:
+                            logger.error(f"[Batch {batch_idx}] ⏱️  INDEXING TIMEOUT after {elapsed:.0f}s")
+                            logger.error(f"[Batch {batch_idx}] Completed: {len(results)}/{len(futures)}")
+                            logger.error(f"[Batch {batch_idx}] Stuck on: {len(remaining_futures)} repos")
+                            
+                            # Log which repos are stuck (first 5)
+                            for future in remaining_futures[:5]:
+                                repo_name, commit = task_mapping[future]
+                                logger.error(f"  - STUCK: {repo_name}@{commit[:7]}")
+                            
+                            # Cancel remaining futures
+                            for future in remaining_futures:
+                                try:
+                                    ray.cancel(future)
+                                except:
+                                    pass
+                                repo_name, commit = task_mapping[future]
+                                errors.append((repo_name, commit, "Indexing timeout"))
+                            
+                            break
+                        
+                        # Check for stalled progress (no progress in 5 minutes)
+                        time_since_progress = time.time() - last_progress_time
+                        if time_since_progress > 300 and len(results) == last_progress_count:
+                            logger.warning(f"[Batch {batch_idx}] ⚠️  No progress in {time_since_progress:.0f}s")
+                            logger.warning(f"[Batch {batch_idx}] Completed: {len(results)}/{len(futures)}")
+                            logger.warning(f"[Batch {batch_idx}] Possibly stuck on:")
+                            for future in remaining_futures[:3]:
+                                repo_name, commit = task_mapping[future]
+                                logger.warning(f"  - {repo_name}@{commit[:7]}")
+                        
+                        # Wait for next completion
+                        done, remaining_futures = ray.wait(remaining_futures, num_returns=1, timeout=5.0)
+                        
+                        for done_future in done:
+                            try:
+                                result = ray.get(done_future, timeout=10.0)
+                                results.append(result)
+                                pbar.update(1)
+                                
+                                # Update progress tracking
+                                last_progress_time = time.time()
+                                last_progress_count = len(results)
+                                
+                                repo_name, commit = task_mapping[done_future]
+                                
+                                if result.get('success', False):
+                                    chunks = result.get('chunks', 0)
+                                    logger.info(f"[Batch {batch_idx}] ✓ {repo_name}@{commit[:7]} - {chunks} chunks")
+                                else:
+                                    error_msg = result.get('error', 'Unknown error')
+                                    logger.error(f"[Batch {batch_idx}] ✗ {repo_name}@{commit[:7]} - {error_msg}")
+                                    errors.append((repo_name, commit, error_msg))
+                                    
+                            except ray.exceptions.RayTaskError as e:
+                                repo_name, commit = task_mapping[done_future]
+                                error_str = str(e)[:500]
+                                logger.error(f"[Batch {batch_idx}] ✗ {repo_name}@{commit[:7]} - Ray task error")
+                                errors.append((repo_name, commit, f"Ray task error: {error_str}"))
+                                pbar.update(1)
+                                last_progress_time = time.time()
+                                last_progress_count = len(results)
+                                
+                            except Exception as e:
+                                repo_name, commit = task_mapping[done_future]
+                                logger.error(f"[Batch {batch_idx}] ✗ {repo_name}@{commit[:7]} - Exception: {e}")
+                                errors.append((repo_name, commit, str(e)[:200]))
+                                pbar.update(1)
+                                last_progress_time = time.time()
+                                last_progress_count = len(results)
+            
+            finally:
+                # ✅ GUARANTEED CLEANUP - Always runs, even if error
+                logger.info(f"[Batch {batch_idx}] Phase 2: Cleaning up GPU indexing workers...")
+                logger.info(f"[Batch {batch_idx}] Killing {len(workers)} GPU workers...")
+                
+                for i, worker in enumerate(workers):
+                    try:
+                        ray.kill(worker, no_restart=True)
+                        logger.debug(f"[Batch {batch_idx}] ✓ Killed worker {i}")
+                    except Exception as e:
+                        logger.warning(f"[Batch {batch_idx}] Could not kill worker {i}: {e}")
+                
+                # Wait for cleanup
+                logger.info(f"[Batch {batch_idx}] Waiting for Ray to release GPU resources...")
+                time.sleep(5)
+                
+                # Check available resources
+                try:
+                    available_resources = ray.available_resources()
+                    gpu_available = available_resources.get('GPU', 0)
+                    cpu_available = available_resources.get('CPU', 0)
+                    logger.info(f"[Batch {batch_idx}] Available after cleanup: GPU={gpu_available}, CPU={cpu_available}")
+                except Exception as e:
+                    logger.warning(f"[Batch {batch_idx}] Could not check resources: {e}")
+                
+                logger.info(f"[Batch {batch_idx}] ✓ GPU indexing workers terminated, GPU freed")
+            
+            # Process indexing results
+            successful_indices = [
+                (r['repo_name'], r['commit']) 
+                for r in results if r.get('success', False)
+            ]
+            failed_indices = [
+                (r['repo_name'], r['commit'], r.get('error', 'Unknown')) 
+                for r in results if not r.get('success', False)
             ]
             
-            logger.info(f"[Batch {batch_idx}] ✓ Created {num_workers} GPU workers")
+            logger.info(f"\n[Batch {batch_idx}] Indexing results:")
+            logger.info(f"  Tasks launched:   {len(futures)}")
+            logger.info(f"  Results received: {len(results)}")
+            logger.info(f"  Successful:       {len(successful_indices)}")
+            logger.info(f"  Failed:           {len(failed_indices)}")
             
-            # Distribute tasks
-            repos_dir = Path(self.cfg.batched_indexing.repos_dir)
+            # Handle incomplete results
+            if len(results) < len(futures):
+                logger.warning(f"[Batch {batch_idx}] ⚠️  Not all indexing tasks completed!")
+                logger.warning(f"[Batch {batch_idx}] Expected: {len(futures)}, Got: {len(results)}")
             
-            for i, (repo_name, commit) in enumerate(successful_clones):
-                dir_name = f"{repo_name.replace('/', '__')}__{commit[:8]}"
-                repo_path = repos_dir / dir_name
-                
-                if not repo_path.exists():
-                    logger.warning(f"[Batch {batch_idx}] Repo not found: {repo_path}")
-                    continue
-                
-                worker = workers[i % num_workers]
-                future = worker.index_repo.remote(repo_name, commit, str(repo_path))
-                futures.append(future)
-                task_mapping[future] = (repo_name, commit)
+            # Detailed error reporting
+            if errors:
+                logger.error(f"\n[Batch {batch_idx}] Indexing errors (showing first 10):")
+                for repo_name, commit, error in errors[:10]:
+                    logger.error(f"  - {repo_name}@{commit[:7]}: {error[:200]}")
+                if len(errors) > 10:
+                    logger.error(f"  ... and {len(errors) - 10} more errors")
             
-            logger.info(f"[Batch {batch_idx}] Launched {len(futures)} indexing tasks")
+            # ✅ Save indexing results to state
+            self.batch_state_manager.update_batch_indexing(
+                batch_idx,
+                successful_repos=successful_indices,
+                failed_repos=failed_clones + failed_indices
+            )
             
-            # Wait for completion with timeout
-            from tqdm import tqdm
-            import time
-            
-            indexing_start_time = time.time()
-            max_indexing_time = 1800  # 30 min
-            last_progress_time = time.time()
-            last_progress_count = 0
-            
-            with tqdm(total=len(futures), desc="Indexing repos") as pbar:
-                remaining_futures = list(futures)
-                
-                while remaining_futures:
-                    elapsed = time.time() - indexing_start_time
-                    if elapsed > max_indexing_time:
-                        logger.error(f"[Batch {batch_idx}] ⏱️  TIMEOUT after {elapsed:.0f}s")
-                        logger.error(f"[Batch {batch_idx}] Completed: {len(results)}/{len(futures)}")
-                        
-                        for future in remaining_futures:
-                            try:
-                                ray.cancel(future)
-                            except:
-                                pass
-                            repo_name, commit = task_mapping[future]
-                            errors.append((repo_name, commit, "Indexing timeout"))
-                        
-                        break
-                    
-                    done, remaining_futures = ray.wait(remaining_futures, num_returns=1, timeout=5.0)
-                    
-                    for done_future in done:
-                        try:
-                            result = ray.get(done_future, timeout=10.0)
-                            results.append(result)
-                            pbar.update(1)
-                            
-                            last_progress_time = time.time()
-                            last_progress_count = len(results)
-                            
-                            repo_name, commit = task_mapping[done_future]
-                            
-                            if result.get('success', False):
-                                logger.info(f"[Batch {batch_idx}] ✓ {repo_name}@{commit[:7]}")
-                            else:
-                                logger.error(f"[Batch {batch_idx}] ✗ {repo_name}@{commit[:7]}: {result.get('error', 'Unknown')}")
-                                errors.append((repo_name, commit, result.get('error', 'Unknown')))
-                                
-                        except Exception as e:
-                            repo_name, commit = task_mapping[done_future]
-                            logger.error(f"[Batch {batch_idx}] ✗ {repo_name}@{commit[:7]}: {str(e)[:200]}")
-                            errors.append((repo_name, commit, str(e)[:200]))
-                            pbar.update(1)
-                            last_progress_time = time.time()
-                            last_progress_count = len(results)
-            
-        finally:
-            # ✅ ALWAYS cleanup workers
-            logger.info(f"[Batch {batch_idx}] Phase 2: Cleaning up {len(workers)} GPU workers...")
-            
-            for i, worker in enumerate(workers):
-                try:
-                    ray.kill(worker, no_restart=True)
-                except Exception as e:
-                    logger.warning(f"[Batch {batch_idx}] Could not kill worker {i}: {e}")
-            
-            # Force GPU cleanup
-            import time
-            import gc
-            import torch
-            
-            logger.info(f"[Batch {batch_idx}] Forcing GPU memory release...")
-            time.sleep(3)
-            gc.collect()
-            if torch.cuda.is_available():
-                torch.cuda.empty_cache()
-                torch.cuda.synchronize()
-            time.sleep(2)
-            
-            available = ray.available_resources()
-            logger.info(f"[Batch {batch_idx}] ✓ After cleanup: GPU={available.get('GPU', 0):.1f}, CPU={available.get('CPU', 0):.1f}")
-        
-        # Process results
-        successful_indices = [(r['repo_name'], r['commit']) for r in results if r.get('success', False)]
-        
-        logger.info(f"[Batch {batch_idx}] Indexing results: {len(successful_indices)}/{len(futures)} successful")
-        
-        if not successful_indices:
-            logger.error(f"[Batch {batch_idx}] ✗ No indices created!")
-            raise RuntimeError(f"Batch {batch_idx} failed - no indices created")
-        
-        # Verify .ready markers
-        cache_dir = Path(self.cfg.batched_indexing.cache_dir)
-        missing = []
-        for repo_name, commit in successful_indices:
-            repo_hash = get_repo_commit_hash(repo_name, commit)
-            if not (cache_dir / repo_hash / ".ready").exists():
-                missing.append((repo_name, commit))
-        
-        if missing:
-            logger.warning(f"[Batch {batch_idx}] Missing {len(missing)} .ready markers, waiting 5s...")
-            import time
-            time.sleep(5)
-            # Remove still-missing from successful_indices
-            for repo_name, commit in missing:
+            # Verify .ready markers exist
+            cache_dir = Path(self.cfg.batched_indexing.cache_dir)
+            verified_indices = []
+            missing_indices = []
+
+            for repo_name, commit in successful_indices:
                 repo_hash = get_repo_commit_hash(repo_name, commit)
-                if not (cache_dir / repo_hash / ".ready").exists():
-                    successful_indices.remove((repo_name, commit))
-        
-        logger.info(f"[Batch {batch_idx}] ✓ Verified {len(successful_indices)} indices")
-        
-        # Phase 3: Setup retrieval
-        logger.info(f"[Batch {batch_idx}] Phase 3: Setting up CPU retrieval...")
-        
-        try:
-            embedding_service = ray.get_actor("embedding_service")
-        except ValueError:
-            from src.services.embedding_service import EmbeddingService
-            embedding_service = EmbeddingService.options(
-                name="embedding_service",
-                num_cpus=4,
-                num_gpus=0,
-                lifetime="detached",
-            ).remote(
-                embedding_model=semantic_config.get("embedding_model"),
-                cache_dir=str(self.cfg.batched_indexing.cache_dir),
-                max_indices=semantic_config.get("max_indices", 15),
-            )
-        
-        ray.get(embedding_service.enter_retrieval_phase.remote())
-        logger.info(f"[Batch {batch_idx}] ✓ Retrieval ready on CPU")
-        
-        # Filter dataset
-        batch_dataset = self.batch_manager.get_batch_dataset(batch_idx)
-        
-        all_failed = set(failed_clones) | set((r, c) for r, c, _ in errors)
-        if all_failed:
-            failed_hashes = {get_repo_commit_hash(r, c) for r, c in all_failed}
-            batch_dataset = batch_dataset.filter(
-                lambda x: get_repo_commit_hash(x[self.batch_manager.repo_field], x[self.batch_manager.commit_field]) not in failed_hashes
-            )
-        
-        self.current_batch_dataset = batch_dataset
-        logger.info(f"[Batch {batch_idx}] Training dataset: {len(batch_dataset)} instances")
-        
-        # Phase 4: Training
-        logger.info(f"[Batch {batch_idx}] Phase 4: Training...")
-        
-        start_time = time.time()
-        self._current_batch_idx = batch_idx
-        trainer = self._setup_trainer()
-        asyncio.run(trainer.train())
-        
-        train_time = time.time() - start_time
-        logger.info(f"[Batch {batch_idx}] ✓ Training complete ({train_time:.0f}s)")
-        
-        self.current_batch_dataset = None
-        
-        # Phase 5: Cleanup
-        if self.cfg.batched_indexing.get("cleanup_between_batches", True):
-            logger.info(f"[Batch {batch_idx}] Phase 5: Cleanup...")
+                ready_file = cache_dir / repo_hash / ".ready"
+                
+                if ready_file.exists():
+                    verified_indices.append((repo_name, commit))
+                else:
+                    logger.error(f"[Batch {batch_idx}] ✗ Missing .ready marker for {repo_name}@{commit[:7]} (hash: {repo_hash})")
+                    missing_indices.append((repo_name, commit))
+
+            if missing_indices:
+                logger.error(f"[Batch {batch_idx}] ✗ {len(missing_indices)} indices missing .ready markers!")
+                logger.error(f"[Batch {batch_idx}] Waiting 5s for filesystem sync...")
+                time.sleep(5)
+                
+                # Check again after sync
+                still_missing = []
+                for repo_name, commit in missing_indices:
+                    repo_hash = get_repo_commit_hash(repo_name, commit)
+                    ready_file = cache_dir / repo_hash / ".ready"
+                    if ready_file.exists():
+                        verified_indices.append((repo_name, commit))
+                    else:
+                        still_missing.append((repo_name, commit))
+                
+                if still_missing:
+                    logger.error(f"[Batch {batch_idx}] ⚠️  Still missing .ready markers after sync:")
+                    for repo_name, commit in still_missing[:5]:
+                        logger.error(f"  - {repo_name}@{commit[:7]}")
+                    logger.error(f"[Batch {batch_idx}] Marking these repos as failed...")
+                    
+                    # Move to failed list
+                    for repo_name, commit in still_missing:
+                        errors.append((repo_name, commit, "Missing .ready marker after sync"))
+                        if (repo_name, commit) in verified_indices:
+                            verified_indices.remove((repo_name, commit))
+
+            logger.info(f"[Batch {batch_idx}] ✓ Verified {len(verified_indices)} indices with .ready markers")
             
-            successful_hashes = [get_repo_commit_hash(r, c) for r, c in successful_indices]
+            if not verified_indices:
+                error_msg = "No repositories were successfully indexed with verified .ready markers"
+                logger.error(f"[Batch {batch_idx}] ✗ {error_msg}")
+                raise RuntimeError(error_msg)
+            
+            # ===================================================================
+            # PHASE 3: RETRIEVAL SETUP (CPU)
+            # ===================================================================
+            logger.info(f"[Batch {batch_idx}] Phase 3: Setting up CPU retrieval...")
+            
+            # Get embedding service (should already exist from setup)
             try:
-                ray.get(embedding_service.cleanup_batch_indices.remote(successful_hashes))
-            except Exception as e:
-                logger.warning(f"[Batch {batch_idx}] Cleanup warning: {e}")
+                embedding_service = ray.get_actor("embedding_service")
+            except ValueError:
+                logger.error("[Batch {batch_idx}] embedding_service actor not found!")
+                raise RuntimeError("EmbeddingService actor missing - check setup_batched_indexing()")
             
-            # Cleanup repos
-            repos_dir = Path(self.cfg.batched_indexing.repos_dir)
-            for repo_name, commit in successful_clones:
-                repo_path = repos_dir / f"{repo_name.replace('/', '__')}__{commit[:8]}"
-                if repo_path.exists():
-                    try:
-                        shutil.rmtree(repo_path)
-                    except:
-                        pass
-        
-        logger.info(f"[Batch {batch_idx}] ✓ Complete")
-        
-    def run(self):
-        """
-        Main training loop with batched indexing support.
-        
-        If batched_indexing.enabled=false, falls back to regular training.
-        Otherwise, runs training in batches with GPU/CPU phase separation.
-        """
-        # Check if batched indexing is enabled
-        if not self.cfg.get("batched_indexing", {}).get("enabled", False):
-            logger.info("[Training] Using regular training (batched indexing disabled)")
-            # Use parent's run method
+            # Enter retrieval phase (models on CPU)
+            ray.get(embedding_service.enter_retrieval_phase.remote())
+            
+            stats = ray.get(embedding_service.get_cache_stats.remote())
+            logger.info(f"[Batch {batch_idx}] ✓ Retrieval ready on {stats['current_device']}")
+            logger.info(f"[Batch {batch_idx}] Phase: {stats['current_phase']}")
+            
+            # ===================================================================
+            # PHASE 4: PREPARE TRAINING DATASET
+            # ===================================================================
+            logger.info(f"[Batch {batch_idx}] Phase 4: Preparing training dataset...")
+            
+            batch_dataset = self.batch_manager.get_batch_dataset(batch_idx)
+            logger.info(f"[Batch {batch_idx}] Original batch dataset size: {len(batch_dataset)}")
+
+            # Filter out failed repos
+            all_failed_repos = set()
+            for repo_name, commit, _ in failed_clones + errors:
+                all_failed_repos.add((repo_name, commit))
+
+            logger.info(f"[Batch {batch_idx}] Failed repos to filter out: {len(all_failed_repos)}")
+
+            if all_failed_repos:
+                failed_hashes = {
+                    get_repo_commit_hash(repo_name, commit) 
+                    for repo_name, commit in all_failed_repos
+                }
+                
+                def keep_instance(instance):
+                    instance_hash = get_repo_commit_hash(
+                        instance[self.batch_manager.repo_field],
+                        instance[self.batch_manager.commit_field]
+                    )
+                    return instance_hash not in failed_hashes
+                
+                original_size = len(batch_dataset)
+                batch_dataset = batch_dataset.filter(keep_instance)
+                filtered_size = len(batch_dataset)
+                
+                logger.info(f"[Batch {batch_idx}] Filtered dataset: {original_size} -> {filtered_size} instances")
+            
+            if len(batch_dataset) == 0:
+                error_msg = "No training instances remaining after filtering failed repos"
+                logger.error(f"[Batch {batch_idx}] ✗ {error_msg}")
+                raise RuntimeError(error_msg)
+            
+            logger.info(f"[Batch {batch_idx}] ✓ Training dataset ready: {len(batch_dataset)} instances")
+            
+            # ===================================================================
+            # PHASE 5: TRAINING
+            # ===================================================================
+            logger.info(f"[Batch {batch_idx}] Phase 5: Training (GPU) with CPU retrieval...")
+            
+            # Create dataset wrapper
+            from skyrl_train.dataset import PromptDataset
+            prompts_dataset = object.__new__(PromptDataset)
+            prompts_dataset.tokenizer = self.tokenizer
+            prompts_dataset.max_prompt_length = self.cfg.trainer.max_prompt_length
+            prompts_dataset.prompt_key = "prompt"
+            prompts_dataset.env_class_key = "env_class"
+            prompts_dataset.num_workers = 8
+            prompts_dataset.datasets = None
+            prompts_dataset.dataframe = batch_dataset
+
+            # Set as current dataset
+            self.train_dataset = prompts_dataset
+
+            # Create fresh trainer for this batch
+            logger.info(f"[Batch {batch_idx}] Creating new trainer...")
             trainer = self._setup_trainer()
+
+            # ✅ Enable batched mode to skip epoch-end validation
+            trainer.enable_batched_mode()
+
+            # Log batch info
+            if hasattr(trainer, 'tracker') and trainer.tracker is not None:
+                trainer.tracker.log({
+                    'batch/current_batch': batch_idx,
+                    'batch/training_instances': len(batch_dataset),
+                    'batch/indexed_repos': len(successful_indices),
+                }, step=trainer.global_step)
+
+            # Update state
+            self.batch_state_manager.update_batch_training(
+                batch_idx,
+                training_instances=len(batch_dataset),
+                training_steps=trainer.num_steps_per_epoch
+            )
+
+            # Run training
+            start_time = time.time()
+            logger.info(f"[Batch {batch_idx}] Training for {trainer.num_steps_per_epoch} steps...")
+
+            asyncio.run(trainer.train())  # Runs cleanly, no assertion error
+
+            train_time = time.time() - start_time
+            logger.info(f"[Batch {batch_idx}] ✓ Training complete in {train_time:.1f}s")
+
+            # Get final global_step
+            final_global_step = trainer.global_step - 1
+
+            # Mark batch as complete
+            self.batch_state_manager.complete_batch(batch_idx, final_global_step)
+            # ===================================================================
+            # PHASE 6: CLEANUP
+            # ===================================================================
+            if self.cfg.batched_indexing.get("cleanup_between_batches", True):
+                logger.info(f"[Batch {batch_idx}] Phase 6: Cleaning up batch...")
+                
+                # Cleanup indices
+                verified_hashes = [
+                    get_repo_commit_hash(repo_name, commit)
+                    for repo_name, commit in verified_indices
+                ]
+                
+                try:
+                    ray.get(embedding_service.cleanup_batch_indices.remote(verified_hashes))
+                    logger.info(f"[Batch {batch_idx}] ✓ Cleaned up {len(verified_hashes)} indices")
+                except Exception as e:
+                    logger.warning(f"[Batch {batch_idx}] Cleanup warning (non-fatal): {e}")
+                
+                # Cleanup cloned repos
+                cleaned_repos = 0
+                for repo_name, commit in successful_clones:
+                    dir_name = f"{repo_name.replace('/', '__')}__{commit[:8]}"
+                    repo_path = repos_dir / dir_name
+                    
+                    if repo_path.exists():
+                        try:
+                            shutil.rmtree(repo_path)
+                            cleaned_repos += 1
+                        except Exception as e:
+                            logger.warning(f"Could not remove {repo_path}: {e}")
+                
+                logger.info(f"[Batch {batch_idx}] Cleaned up {cleaned_repos} repos")
+            
+            logger.info(f"[Batch {batch_idx}] ✓ Complete\n")
+            
+        except Exception as e:
+            # ✅ Mark batch as failed in state
+            self.batch_state_manager.fail_batch(batch_idx, str(e))
+            raise
+    
+    def run(self):
+        """Main training loop with resume support."""
+        if not self.cfg.get("batched_indexing", {}).get("enabled", False):
+            logger.info("[Training] Regular training (batched disabled)")
+            trainer = super()._setup_trainer()
             asyncio.run(trainer.train())
             return
         
-        logger.info("[Training] Using batched training mode")
-        
-        # Setup batched indexing (will load dataset if needed)
+        logger.info("[Training] Batched training mode")
         self.setup_batched_indexing()
         
-        from skyrl_train.utils.tracking import Tracking
+        # ✅ Determine starting batch (resume support)
+        start_batch = self.batch_state_manager.get_resume_batch()
         
-        logger.info("[Training] Creating shared WandB tracker for all batches...")
+        if start_batch is None:
+            logger.info("[Training] All batches already complete!")
+            return
+        
+        if start_batch > 0:
+            logger.info(f"[Training] ⚡ RESUMING from batch {start_batch}")
+            logger.info(f"[Training] Batches 0-{start_batch-1} already complete")
+        
+        # ✅ Create shared tracker
+        from skyrl_train.utils.tracking import Tracking
+        logger.info("[Training] Creating shared tracker...")
         self._shared_tracker = Tracking(
             project_name=self.cfg.trainer.project_name,
             experiment_name=self.cfg.trainer.run_name,
             backends=self.cfg.trainer.logger,
             config=self.cfg,
         )
-        logger.info("[Training] ✓ Shared tracker created")
         
-        # Run training in batches
         num_batches = self.batch_manager.num_batches
-        logger.info(f"[Training] Starting training across {num_batches} batches")
+        logger.info(f"[Training] Processing batches {start_batch} to {num_batches-1}\n")
         
         try:
-            for batch_idx in range(num_batches):
+            for batch_idx in range(start_batch, num_batches):  # ✅ Start from resume point
                 try:
                     self.run_batch(batch_idx)
                     
-                    # Simple progress logging
-                    completed = batch_idx + 1
-                    progress_percent = (completed / num_batches) * 100
-                    logger.info(f"[Progress] Completed {completed}/{num_batches} "
-                               f"batches ({progress_percent:.1f}%)")
+                    # Print progress
+                    summary = self.batch_state_manager.get_progress_summary()
+                    logger.info(
+                        f"[Progress] {summary['completed_batches']}/{num_batches} "
+                        f"batches complete ({summary['progress_percent']:.1f}%)\n"
+                    )
                     
                 except Exception as e:
-                    logger.error(f"[Batch {batch_idx}] ✗ Failed with error: {e}")
-                    logger.error("Full traceback:")
+                    logger.error(f"[Batch {batch_idx}] Failed: {e}")
                     import traceback
                     logger.error(traceback.format_exc())
                     
-                    if self.cfg.get("batched_indexing", {}).get("continue_on_batch_failure", False):
-                        logger.warning(f"[Batch {batch_idx}] Continuing to next batch...")
-                        continue
-                    else:
-                        logger.error("[Training] Aborting due to batch failure")
+                    if not self.cfg.get("batched_indexing", {}).get("continue_on_batch_failure", False):
                         raise
+                    logger.warning(f"[Batch {batch_idx}] Continuing to next batch...")
             
             logger.info("[Training] ✓ All batches complete!")
             
+            # ✅ Print final summary
+            self.batch_state_manager.print_summary()
+        
         finally:
-            # ✅ Always finish tracker, even if training fails
+            # Finish tracker
             if hasattr(self, '_shared_tracker') and self._shared_tracker is not None:
                 try:
-                    # Use the proper finish method from Track3ing class
-                    if hasattr(self._shared_tracker, 'logger') and 'wandb' in self._shared_tracker.logger:
+                    if 'wandb' in self._shared_tracker.logger:
                         self._shared_tracker.logger['wandb'].finish(exit_code=0)
-                    logger.info("[Training] ✓ WandB run finished")
+                    logger.info("[Training] ✓ WandB finished")
                 except Exception as e:
-                    logger.warning(f"[Training] Error finishing tracker: {e}")
+                    logger.warning(f"Tracker finish error: {e}")
             
-            # Cleanup embedding service actor
+            # Cleanup embedding service
             try:
                 embedding_service = ray.get_actor("embedding_service")
                 ray.kill(embedding_service)
-                logger.info("[Cleanup] ✓ EmbeddingService actor terminated")
-            except ValueError:
-                logger.warning("[Cleanup] embedding_service actor not found")
-            except Exception as e:
-                logger.warning(f"[Cleanup] Could not terminate embedding_service: {e}")
+                logger.info("[Cleanup] ✓ Embedding service terminated")
+            except:
+                pass
+
 
 @ray.remote(num_cpus=1)
 def skyrl_entrypoint(cfg: DictConfig):
-    """Ray remote entry point for training."""
+    """Ray remote entry point."""
     exp = BatchedCodeSearchPPOExp(cfg)
     exp.run()
 
 
 @hydra.main(config_path=config_dir, config_name="ppo_base_config", version_base=None)
 def main(cfg: DictConfig) -> None:
-    """Main entry point with two-phase batched indexing."""
-    # Validate configuration
+    """Main entry point."""
     validate_cfg(cfg)
 
-    # Setup rewards - CRITICAL for reward tracking!
+    # Setup rewards
     if hasattr(cfg.generator, "reward"):
         with open(cfg.generator.reward, "r") as f:
             reward_cfg = OmegaConf.load(f)
         cfg.generator.reward = reward_cfg.reward
     else:
         with open_dict(cfg):
-            cfg.generator.reward = [
-                {"fn": "multilevel_localization_f1_reward"},
-            ]
+            cfg.generator.reward = [{"fn": "multilevel_localization_f1_reward"}]
 
-    # Setup two-phase semantic search
-    semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({'enabled': False}))
-    
-    if semantic_search_cfg.enabled:
-        logger.info("\n" + "="*80)
-        logger.info("Initializing Two-Phase Semantic Search")
-        logger.info("="*80)
-        
-        # Check batched indexing configuration
-        batched_config = cfg.get('batched_indexing', {})
-        if batched_config.get('enabled', False):
-            cache_dir = Path(batched_config.cache_dir)
-            logger.info(f"[TwoPhase] Batched indexing enabled (batch_size={batched_config.batch_size})")
-            logger.info(f"[TwoPhase] Cache directory: {cache_dir}")
-        else:
-            cache_dir = Path("/data/user_data/sanidhyv/.cache/swebench_indices")
-        
-        # Check for existing indices
-        if cache_dir.exists():
-            num_indices = len(list(cache_dir.iterdir()))
-            if num_indices > 0:
-                logger.info(f"[TwoPhase] Found {num_indices} existing indices")
-        
-        logger.info(f"[TwoPhase] Two-phase architecture ready")
-        logger.info("="*80 + "\n")
-    
     # Initialize Ray
     if ray.is_initialized():
         ray.shutdown()
@@ -1020,59 +803,19 @@ def main(cfg: DictConfig) -> None:
     from skyrl_train.utils import prepare_runtime_environment
     from skyrl_train.utils.ppo_utils import sync_registries
 
-    # Prepare environment variables
     env_vars = prepare_runtime_environment(cfg)
-
-    # Define exclusions for Ray runtime environment
+    
     excludes = [
-        # Checkpoints and models
-        "ckpts/",
-        "*.ckpt",
-        "*.pth",
-        "*.pt",
-        "*.safetensors",
-        "*.bin",
-        
-        # Logs
-        "logs/",
-        "*.log",
-        "*.out",
-        "*.err",
-        
-        # Caches and temp
-        ".cache/",
-        "__pycache__/",
-        "*.pyc",
-        ".pytest_cache/",
-        ".venv/",
-        "venv/",
-        "env/",
-        "ray_temp*/",
-        "ray_spill/",
-        
-        # Trajectories
-        "trajectories/",
-        
-        # Git
-        ".git/",
-        
-        # Hydra outputs
-        "outputs/",
-        "multirun/",
+        "ckpts/", "*.ckpt", "*.pth", "*.pt", "*.safetensors", "*.bin",
+        "logs/", "*.log", "*.out", "*.err",
+        ".cache/", "__pycache__/", "*.pyc", ".pytest_cache/",
+        ".venv/", "venv/", "env/", "ray_temp*/", "ray_spill/",
+        "trajectories/", ".git/", "outputs/", "multirun/",
     ]
 
-    # Initialize Ray with runtime environment
-    ray.init(
-        runtime_env={
-            "env_vars": env_vars,
-            "excludes": excludes,
-        }
-    )
-
-    # Sync registries
+    ray.init(runtime_env={"env_vars": env_vars, "excludes": excludes})
     sync_registries()
     
-    # Run training
     ray.get(skyrl_entrypoint.remote(cfg))
 
 
