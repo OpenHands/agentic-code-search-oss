@@ -1,0 +1,2 @@
+reward:
+  - fn: scaled_f1_reward

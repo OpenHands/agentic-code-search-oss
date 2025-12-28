@@ -23,7 +23,7 @@ def get_instruction(
     context = {
         "instance": instance,
         "workspace_dir_name": workspace_dir_name,
-        "actual_workspace_path": workspace_path,
+        "working_dir": workspace_path,
     }
     context["test_instructions"] = ""
 

@@ -1,0 +1,7 @@
+reward:
+  - fn: cosine_reward
+    args:
+      loc_threshold: 0.5
+      file_level_weight: 1.0
+      module_level_weight: 0.0
+      entity_level_weight: 0.0

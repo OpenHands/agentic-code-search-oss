@@ -1,0 +1,3 @@
+reward:
+  - fn: file_localization_f1_reward
+  - fn: tool_use_reward

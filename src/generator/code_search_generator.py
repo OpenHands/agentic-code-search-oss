@@ -90,11 +90,15 @@ def init_and_run(
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
+    if "use_patch" in instance and instance["use_patch"]:
+        patch = instance["patch"]
+    else:
+        patch = None
     
     # Avoid collisions in /tmp testbed directories
     uuid_str = str(uuid.uuid4())[:8]
     workspace = Path(f"/tmp/testbed/{uuid_str}/")
-    status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
+    status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace, patch)
 
     if training_phase == "eval":
         temperature = 0.6
@@ -119,7 +123,7 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
-    agent = CustomAgent(
+    agent = Agent(
         llm=LLM(
             usage_id="agent",
             model=litellm_model_name,
@@ -138,7 +142,7 @@ def init_and_run(
 
     conversation = Conversation(
         agent=agent,
-        max_iteration_per_run=10,
+        max_iteration_per_run=generator_cfg.max_turns,
         visualizer=None,
         workspace=str(working_dir),
     )
@@ -181,6 +185,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         inference_engine_client: InferenceEngineClient,
         tokenizer,
         model_name: str,
+        step_wise: bool = False,
     ):
         # Call parent constructor first
         super().__init__(
@@ -206,6 +211,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 "OpenhandsGenerator doesn't support custom chat template"
             )
 
+        self.step_wise = step_wise
+        self.max_train_length = generator_cfg.get(
+            "max_train_length", 16384
+        )
+
     async def code_search_loop(
         self,
         prompt: ConversationType,
@@ -224,10 +234,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             messages, final_message, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
-                # sweagent_config,
                 self.base_url,
                 self.generator_cfg,
-                # env_extras["data_source"],
                 "swe-gym",
                 sampling_params,
                 trajectory_id,
@@ -314,17 +322,67 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         gamma = 0.9
         num_steps = len(token_messages)
         if len(token_messages) > 0:
-            for idx, message in enumerate(token_messages):
-                current_prompt_ids = message["prompt_token_ids"]
-                current_response_ids = message["response_token_ids"]
-                step_reward = reward * gamma**(num_steps - idx - 1)
+            if self.step_wise:
+                for idx, message in enumerate(token_messages):
+                    current_prompt_ids = message["prompt_token_ids"]
+                    current_response_ids = message["response_token_ids"]
+                    step_reward = reward * gamma**(num_steps - idx - 1)
+
+                    rollout_list.append(
+                        (
+                            current_response_ids,
+                            step_reward,
+                            "complete",
+                            [1]*len(current_response_ids),
+                            current_prompt_ids,
+                            None,
+                            trajectory_metrics
+                        )
+                    )
+            else:
+
+                # Max Sequence for training
+                max_train_len = self.max_train_length
+
+                current_prompt_ids = token_messages[0]["prompt_token_ids"]
+                ending_prompt_ids = token_messages[-1]["prompt_token_ids"]
+                ending_response_ids = token_messages[-1]["response_token_ids"]
+                current_response_ids = ending_prompt_ids + ending_response_ids
+                current_response_ids = current_response_ids[len(current_prompt_ids):]
+
+                max_response_len = max_train_len - len(current_prompt_ids)
+
+                # make mask of 0 for everything inside <|im_start|> 
+                # and assistant and 1 elsewhere 
+                start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
+                end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
+                mask = []
+                inside = False
+                for token_id in current_response_ids:
+                    if token_id == start_token_id:
+                        inside = True
+                        mask.append(0)
+                    elif token_id == end_token_id:
+                        inside = False
+                        mask.append(0)
+                    else:
+                        if inside:
+                            mask.append(0)
+                        else:
+                            mask.append(1)
+
+                # mask zero out everything beyond max_response_len
+                # Don't truncate the response, just mask out the loss
+                if len(current_response_ids) > max_response_len:
+                    for i in range(max_response_len, len(current_response_ids)):
+                        mask[i] = 0
 
                 rollout_list.append(
                     (
                         current_response_ids,
-                        step_reward,
+                        reward,
                         "complete",
-                        [1]*len(current_response_ids),
+                        mask,
                         current_prompt_ids,
                         None,
                         trajectory_metrics

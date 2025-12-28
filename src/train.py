@@ -20,6 +20,7 @@ class CodeSearchPPOExp(BasePPOExp):
             inference_engine_client=inference_engine_client,
             tokenizer=tokenizer,
             model_name=self.cfg.trainer.policy.model.path,
+            step_wise=cfg.trainer.get("step_wise_training", False),
         )
         return generator
 
