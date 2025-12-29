@@ -43,6 +43,8 @@ from openhands.sdk.conversation.response_utils import get_agent_final_response
 from openhands.workspace import DockerWorkspace
 from openhands.tools.preset.default import get_default_tools
 from openhands.tools.preset.planning import get_planning_tools
+from openhands.tools.glob import GlobTool
+from openhands.tools.grep import GrepTool
 from openhands.tools.terminal import TerminalTool
 from openhands.sdk.tool import Tool, register_tool
 from openhands.sdk import (
@@ -60,7 +62,7 @@ from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
-from src.tools import TOOL_REGISTRY
+# from src.tools import TOOL_REGISTRY
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
@@ -108,14 +110,20 @@ def init_and_run(
     final_message = ""
     messages = []
 
-    for tool_name in generator_cfg.tools:
-        if tool_name in TOOL_REGISTRY:
-            register_tool(tool_name, TOOL_REGISTRY[tool_name])
-        else:
-            raise ValueError(f"Tool {tool_name} does not exist in the registry")
+    # for tool_name in generator_cfg.tools:
+    #     if tool_name in TOOL_REGISTRY:
+    #         register_tool(tool_name, TOOL_REGISTRY[tool_name])
+    #     else:
+    #         raise ValueError(f"Tool {tool_name} does not exist in the registry")
+
+    # tools = [
+    #     Tool(name=tool_name) for tool_name in generator_cfg.tools
+    # ]
 
     tools = [
-        Tool(name=tool_name) for tool_name in generator_cfg.tools
+        Tool(name=GlobTool.name),
+        Tool(name=GrepTool.name),
+        Tool(name=TerminalTool.name),
     ]
 
     # Get prompt paths from config (path-independent)
@@ -213,7 +221,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         self.step_wise = step_wise
         self.max_train_length = generator_cfg.get(
-            "max_train_length", 16384
+            "max_train_length", 32768
         )
 
     async def code_search_loop(
@@ -297,11 +305,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 **reward_items,
             }
 
-        if final_message == "":
-            reward = -10.0
-
-        logger.info(f"Reward details: {reward_dict}, Total reward: {reward}")
-
         # Compute Trajectory Metrics
         efficiency_metrics = compute_all_efficiency_metrics(
             messages=messages,
@@ -315,7 +318,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             **trajectory_metrics
         }
 
-        print(f"Trajectory metrics: {metrics_dict}")
+        print(f"Total reward: {reward}\nReward details: {reward_dict}\nTrajectory metrics: {metrics_dict}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
