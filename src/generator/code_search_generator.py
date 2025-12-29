@@ -178,6 +178,15 @@ def init_and_run(
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
     final_message = get_agent_final_response(conversation.state.events)
 
+    # remove the workspace dir
+    try:
+        if workspace.exists():
+            os.system(f"rm -rf {str(workspace)}")
+            logger.info(f"Removed workspace {str(workspace)}")
+    except Exception as e:
+        logger.error(f"Error removing workspace {str(workspace)}: {e}", exc_info=True)
+
+
     conversation.close()
     logger.info("Conversation Finished")
 
