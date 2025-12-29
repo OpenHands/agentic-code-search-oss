@@ -19,10 +19,6 @@ DEFAULT_OPENHANDS_TOOLS = [
     "tom_consult"
 ]
 
-def tool_exists(tool_name: str):
-    """Check if a tool exists in the registry."""
-    return tool_name in DEFAULT_OPENHANDS_TOOLS or tool_name in TOOL_REGISTRY
-
 def tool(name: str):
     """Decorator to register a new tool function."""
     def decorator(func):

@@ -1,16 +1,15 @@
 import hydra
-from omegaconf import DictConfig, OmegaConf, open_dict
-from skyrl_train.entrypoints.main_base import BasePPOExp, config_dir, validate_cfg
+from omegaconf import DictConfig, OmegaConf
+from skyrl_train.entrypoints.main_base import BasePPOExp
 from skyrl_train.utils import initialize_ray
 import ray
 
 import asyncio
 
-from src.tools import tool_exists
 from src.generator.code_search_generator import CodeSearchGenerator
 from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
+from src.utils.config import validate_cfg, register_resolvers
 # from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
-
 
 class CodeSearchPPOExp(BasePPOExp):
     def get_generator(self, cfg, tokenizer, inference_engine_client):
@@ -61,47 +60,16 @@ def skyrl_entrypoint(cfg: DictConfig):
     else:
         print("Running sync trainer")
         exp = CodeSearchPPOExp(cfg)
+    
+    register_resolvers()
+
     exp.run()
 
 
-@hydra.main(config_path=config_dir, config_name="ppo_base_config", version_base=None)
+@hydra.main(config_path="../config", config_name="base", version_base=None)
 def main(cfg: DictConfig) -> None:
     # validate the arguments
     validate_cfg(cfg)
-
-    # check cfg.generator.exp_config if it exists or not
-    if hasattr(cfg.generator, "exp_config"):
-        # Open yaml file and print its contents
-        with open(cfg.generator.exp_config, "r") as f:
-            exp_cfg = OmegaConf.load(f)
-
-        with open_dict(cfg):
-            cfg.generator.reward = exp_cfg.reward
-            cfg.generator.tools = exp_cfg.tools
-            # Parse prompts if they exist in the exp config
-            if hasattr(exp_cfg, "prompts"):
-                cfg.generator.prompts = exp_cfg.prompts
-    else:
-        with open_dict(cfg):
-            cfg.generator.reward = [
-                {"fn": "multilevel_localization_f1_reward"},
-            ]
-            cfg.generator.tools = [
-                "terminal",
-            ]
-
-    # Check if the tool exists in the registry
-    for tool in cfg.generator.tools:
-        if not tool_exists(tool):
-            raise ValueError(f"Tool {tool} does not exist in the registry")
-    
-    # Set default prompts if not specified
-    if not hasattr(cfg.generator, "prompts"):
-        with open_dict(cfg):
-            cfg.generator.prompts = {
-                "system_prompt": "templates/system_prompt.j2",
-                "user_prompt": "templates/file_module_parallel_tools.j2"
-            }
     
     initialize_ray(cfg)
     ray.get(skyrl_entrypoint.remote(cfg))

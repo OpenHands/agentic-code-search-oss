@@ -1,0 +1,41 @@
+# @package _global_
+run_async_trainer: true
+
+trainer:
+  placement:
+    colocate_all: false
+    colocate_policy_ref: true
+    policy_num_gpus_per_node: ${eval:'${platform.gpus_per_node} // 2'}
+    ref_num_gpus_per_node: ${eval:'${platform.gpus_per_node} // 2'}
+
+  strategy: fsdp2
+
+  policy:
+    fsdp_config:
+      cpu_offload: true
+      reshard_after_forward: true
+      fsdp_size: -1
+    sequence_parallel_size: 1
+
+  fully_async:
+    num_parallel_generation_workers: 16
+
+  
+
+  train_batch_size: 8
+  policy_mini_batch_size: 8
+  micro_forward_batch_size_per_gpu: 1
+  micro_train_batch_size_per_gpu: 1
+
+  step_wise_training: true
+  resume_mode: latest
+  max_ckpts_to_keep: 3
+
+generator:
+  batched: false
+  n_samples_per_prompt: 8
+  gpu_memory_utilization: 0.75
+  enforce_eager: false
+
+  num_inference_engines: ${eval:'${platform.gpus_per_node} // 2'}
+
