@@ -39,15 +39,11 @@ def clone_instance(
                 "clone",
                 f"https://github.com/{repo_name}.git",
                 str(instance_path),
+                "--depth",
+                "1",
+                "--revision",
+                commit_id,
             ],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-
-        # Checkout the specific commit
-        subprocess.run(
-            ["git", "-C", str(instance_path), "checkout", commit_id],
             check=True,
             capture_output=True,
             text=True,
