@@ -1,0 +1,19 @@
+# @package _global_
+platform:
+  gpus_per_node: 1
+
+generator:
+  sampling_params:
+      max_generate_length: 2048
+
+hydra:
+  job:
+    env_set:
+      CUDA_LAUNCH_BLOCKING: "1"
+      VLLM_FLASH_ATTN_VERSION: "2"
+      TORCH_USE_CUDA_DSA: "1"
+      RAY_OVERRIDE_RESOURCES: '{"GPU": 1, "TPU": 0}'
+
+
+
+
