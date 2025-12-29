@@ -1,0 +1,6 @@
+System,File Acc@1,File Acc@5,File F1,Module F1,Function/Entity F1
+SWE-Fixer,0.6900,0.6933,0.6917,N/A,N/A
+LocAgent (return 1),0.7733,0.7733,0.7733,0.6453,0.4778
+LocAgent (return 2),0.7733,0.8767,0.6078,0.5423,0.4406
+LocAgent (return 3),0.7733,0.9133,0.5144,0.4505,0.3892
+LocAgent (return all),0.7733,0.9367,0.4348,0.3402,0.1975
