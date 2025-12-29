@@ -1,8 +1,10 @@
 """
 Evaluate LocAgent localization results using our evaluation metrics.
 
-This script evaluates the LocAgent baseline on SWE-Bench Lite using
-file-level, module-level, and entity/function-level F1 scores.
+This script evaluates the LocAgent baseline on SWE-Bench Lite using:
+- F1 scores at file, module, and entity/function levels
+- Acc@k metrics (accuracy at top-k predictions)
+- Top-k thresholded F1 scores (using only top-k predictions)
 """
 
 import json
@@ -25,20 +27,51 @@ def load_locagent_results(filepath: str) -> list:
     return results
 
 
-def evaluate_locagent(results: list) -> dict:
+def compute_acc_at_k(predictions: list, ground_truth: set, k: int) -> float:
+    """Compute Acc@k: 1 if any GT item is in top-k predictions, else 0."""
+    if not ground_truth:
+        return 0.0
+    top_k = set(predictions[:k])
+    return 1.0 if top_k & ground_truth else 0.0
+
+
+def compute_recall_at_k(predictions: list, ground_truth: set, k: int) -> float:
+    """Compute Recall@k: fraction of GT items found in top-k predictions."""
+    if not ground_truth:
+        return 0.0
+    top_k = set(predictions[:k])
+    return len(top_k & ground_truth) / len(ground_truth)
+
+
+def evaluate_locagent(results: list, top_k_values: list = [1, 3, 5, 10]) -> dict:
     """
     Evaluate LocAgent results at file, module, and entity levels.
     
     Returns dict with:
-    - file_f1: Average F1 score at file level
-    - module_f1: Average F1 score at module level  
-    - entity_f1: Average F1 score at entity/function level
+    - F1 scores (using all predictions)
+    - Acc@k metrics for various k values
+    - Top-k thresholded F1 scores (using only top-k predictions)
     - per_instance: Detailed per-instance results
     """
     file_scores = []
     module_scores = []
     entity_scores = []
     per_instance = []
+    
+    # Acc@k tracking
+    file_acc_at_k = {k: [] for k in top_k_values}
+    module_acc_at_k = {k: [] for k in top_k_values}
+    entity_acc_at_k = {k: [] for k in top_k_values}
+    
+    # Recall@k tracking
+    file_recall_at_k = {k: [] for k in top_k_values}
+    module_recall_at_k = {k: [] for k in top_k_values}
+    entity_recall_at_k = {k: [] for k in top_k_values}
+    
+    # Top-k thresholded F1 tracking
+    file_f1_at_k = {k: [] for k in top_k_values}
+    module_f1_at_k = {k: [] for k in top_k_values}
+    entity_f1_at_k = {k: [] for k in top_k_values}
     
     # Track instances with valid ground truth
     valid_file_count = 0
@@ -48,7 +81,7 @@ def evaluate_locagent(results: list) -> dict:
     for result in results:
         instance_id = result['instance_id']
         
-        # Get predictions
+        # Get predictions (assumed to be ordered by relevance/confidence)
         pred_files = result.get('found_files', [])
         pred_modules = result.get('found_modules', [])
         pred_entities = result.get('found_entities', [])
@@ -75,12 +108,12 @@ def evaluate_locagent(results: list) -> dict:
         gt_modules = set(gt_modules)
         gt_entities = set(gt_entities)
         
-        # Compute F1 scores
+        # Compute F1 scores (using all predictions)
         file_f1 = compute_file_f1_score(pred_files, gt_files)
         module_f1 = compute_file_f1_score(pred_modules, gt_modules) if gt_modules else None
         entity_f1 = compute_file_f1_score(pred_entities, gt_entities) if gt_entities else None
         
-        # Track scores (only for instances with valid ground truth)
+        # Track F1 scores
         file_scores.append(file_f1)
         valid_file_count += 1
         
@@ -92,7 +125,8 @@ def evaluate_locagent(results: list) -> dict:
             entity_scores.append(entity_f1)
             valid_entity_count += 1
         
-        per_instance.append({
+        # Compute Acc@k, Recall@k, and top-k thresholded F1 for each k
+        instance_metrics = {
             'instance_id': instance_id,
             'file_f1': file_f1,
             'module_f1': module_f1,
@@ -103,17 +137,62 @@ def evaluate_locagent(results: list) -> dict:
             'gt_files': list(gt_files),
             'gt_modules': list(gt_modules),
             'gt_entities': list(gt_entities),
-        })
+        }
+        
+        for k in top_k_values:
+            # File-level metrics
+            file_acc_at_k[k].append(compute_acc_at_k(pred_files, gt_files, k))
+            file_recall_at_k[k].append(compute_recall_at_k(pred_files, gt_files, k))
+            file_f1_at_k[k].append(compute_file_f1_score(pred_files[:k], gt_files))
+            
+            # Module-level metrics (only if GT exists)
+            if gt_modules:
+                module_acc_at_k[k].append(compute_acc_at_k(pred_modules, gt_modules, k))
+                module_recall_at_k[k].append(compute_recall_at_k(pred_modules, gt_modules, k))
+                module_f1_at_k[k].append(compute_file_f1_score(pred_modules[:k], gt_modules))
+            
+            # Entity-level metrics (only if GT exists)
+            if gt_entities:
+                entity_acc_at_k[k].append(compute_acc_at_k(pred_entities, gt_entities, k))
+                entity_recall_at_k[k].append(compute_recall_at_k(pred_entities, gt_entities, k))
+                entity_f1_at_k[k].append(compute_file_f1_score(pred_entities[:k], gt_entities))
+            
+            instance_metrics[f'file_acc@{k}'] = file_acc_at_k[k][-1]
+            instance_metrics[f'file_f1@{k}'] = file_f1_at_k[k][-1]
+        
+        per_instance.append(instance_metrics)
     
     # Compute averages
     avg_file_f1 = sum(file_scores) / len(file_scores) if file_scores else 0.0
     avg_module_f1 = sum(module_scores) / len(module_scores) if module_scores else 0.0
     avg_entity_f1 = sum(entity_scores) / len(entity_scores) if entity_scores else 0.0
     
+    # Compute average Acc@k, Recall@k, and F1@k
+    def avg(lst):
+        return sum(lst) / len(lst) if lst else 0.0
+    
     return {
+        # F1 scores (all predictions)
         'file_f1': avg_file_f1,
         'module_f1': avg_module_f1,
         'entity_f1': avg_entity_f1,
+        
+        # Acc@k metrics
+        'file_acc_at_k': {k: avg(file_acc_at_k[k]) for k in top_k_values},
+        'module_acc_at_k': {k: avg(module_acc_at_k[k]) for k in top_k_values},
+        'entity_acc_at_k': {k: avg(entity_acc_at_k[k]) for k in top_k_values},
+        
+        # Recall@k metrics
+        'file_recall_at_k': {k: avg(file_recall_at_k[k]) for k in top_k_values},
+        'module_recall_at_k': {k: avg(module_recall_at_k[k]) for k in top_k_values},
+        'entity_recall_at_k': {k: avg(entity_recall_at_k[k]) for k in top_k_values},
+        
+        # Top-k thresholded F1 scores
+        'file_f1_at_k': {k: avg(file_f1_at_k[k]) for k in top_k_values},
+        'module_f1_at_k': {k: avg(module_f1_at_k[k]) for k in top_k_values},
+        'entity_f1_at_k': {k: avg(entity_f1_at_k[k]) for k in top_k_values},
+        
+        # Counts
         'valid_file_count': valid_file_count,
         'valid_module_count': valid_module_count,
         'valid_entity_count': valid_entity_count,
@@ -137,21 +216,46 @@ def main():
     print("\nEvaluating LocAgent (Claude 3.5) on SWE-Bench Lite...")
     metrics = evaluate_locagent(results)
     
-    print("\n" + "="*60)
+    print("\n" + "="*70)
     print("LocAgent (Claude 3.5) Evaluation Results on SWE-Bench Lite")
-    print("="*60)
-    print(f"\nFile-level F1:     {metrics['file_f1']:.4f} ({metrics['valid_file_count']} instances)")
+    print("="*70)
+    
+    # F1 Scores (all predictions)
+    print(f"\n--- F1 Scores (using all predictions) ---")
+    print(f"File-level F1:     {metrics['file_f1']:.4f} ({metrics['valid_file_count']} instances)")
     print(f"Module-level F1:   {metrics['module_f1']:.4f} ({metrics['valid_module_count']} instances with module GT)")
     print(f"Entity-level F1:   {metrics['entity_f1']:.4f} ({metrics['valid_entity_count']} instances with entity GT)")
-    print(f"\nTotal instances:   {metrics['total_instances']}")
+    
+    # Acc@k metrics
+    print(f"\n--- Acc@k Metrics (any GT in top-k) ---")
+    print(f"{'Level':<10} {'Acc@1':>8} {'Acc@3':>8} {'Acc@5':>8} {'Acc@10':>8}")
+    print(f"{'File':<10} {metrics['file_acc_at_k'][1]:>8.4f} {metrics['file_acc_at_k'][3]:>8.4f} {metrics['file_acc_at_k'][5]:>8.4f} {metrics['file_acc_at_k'][10]:>8.4f}")
+    print(f"{'Module':<10} {metrics['module_acc_at_k'][1]:>8.4f} {metrics['module_acc_at_k'][3]:>8.4f} {metrics['module_acc_at_k'][5]:>8.4f} {metrics['module_acc_at_k'][10]:>8.4f}")
+    print(f"{'Entity':<10} {metrics['entity_acc_at_k'][1]:>8.4f} {metrics['entity_acc_at_k'][3]:>8.4f} {metrics['entity_acc_at_k'][5]:>8.4f} {metrics['entity_acc_at_k'][10]:>8.4f}")
+    
+    # Recall@k metrics
+    print(f"\n--- Recall@k Metrics (fraction of GT in top-k) ---")
+    print(f"{'Level':<10} {'R@1':>8} {'R@3':>8} {'R@5':>8} {'R@10':>8}")
+    print(f"{'File':<10} {metrics['file_recall_at_k'][1]:>8.4f} {metrics['file_recall_at_k'][3]:>8.4f} {metrics['file_recall_at_k'][5]:>8.4f} {metrics['file_recall_at_k'][10]:>8.4f}")
+    print(f"{'Module':<10} {metrics['module_recall_at_k'][1]:>8.4f} {metrics['module_recall_at_k'][3]:>8.4f} {metrics['module_recall_at_k'][5]:>8.4f} {metrics['module_recall_at_k'][10]:>8.4f}")
+    print(f"{'Entity':<10} {metrics['entity_recall_at_k'][1]:>8.4f} {metrics['entity_recall_at_k'][3]:>8.4f} {metrics['entity_recall_at_k'][5]:>8.4f} {metrics['entity_recall_at_k'][10]:>8.4f}")
+    
+    # Top-k thresholded F1 scores
+    print(f"\n--- F1@k Scores (using only top-k predictions) ---")
+    print(f"{'Level':<10} {'F1@1':>8} {'F1@3':>8} {'F1@5':>8} {'F1@10':>8}")
+    print(f"{'File':<10} {metrics['file_f1_at_k'][1]:>8.4f} {metrics['file_f1_at_k'][3]:>8.4f} {metrics['file_f1_at_k'][5]:>8.4f} {metrics['file_f1_at_k'][10]:>8.4f}")
+    print(f"{'Module':<10} {metrics['module_f1_at_k'][1]:>8.4f} {metrics['module_f1_at_k'][3]:>8.4f} {metrics['module_f1_at_k'][5]:>8.4f} {metrics['module_f1_at_k'][10]:>8.4f}")
+    print(f"{'Entity':<10} {metrics['entity_f1_at_k'][1]:>8.4f} {metrics['entity_f1_at_k'][3]:>8.4f} {metrics['entity_f1_at_k'][5]:>8.4f} {metrics['entity_f1_at_k'][10]:>8.4f}")
+    
+    print(f"\nTotal instances: {metrics['total_instances']}")
     
     # Show some examples
-    print("\n" + "-"*60)
+    print("\n" + "-"*70)
     print("Sample Results (first 5 instances):")
-    print("-"*60)
+    print("-"*70)
     for inst in metrics['per_instance'][:5]:
         print(f"\n{inst['instance_id']}:")
-        print(f"  File F1: {inst['file_f1']:.4f}")
+        print(f"  File F1: {inst['file_f1']:.4f} | F1@1: {inst['file_f1@1']:.4f} | Acc@1: {inst['file_acc@1']:.4f}")
         module_str = f"{inst['module_f1']:.4f}" if inst['module_f1'] is not None else 'N/A'
         entity_str = f"{inst['entity_f1']:.4f}" if inst['entity_f1'] is not None else 'N/A'
         print(f"  Module F1: {module_str}")
@@ -172,6 +276,15 @@ def main():
                 'file_f1': metrics['file_f1'],
                 'module_f1': metrics['module_f1'],
                 'entity_f1': metrics['entity_f1'],
+                'file_acc_at_k': metrics['file_acc_at_k'],
+                'module_acc_at_k': metrics['module_acc_at_k'],
+                'entity_acc_at_k': metrics['entity_acc_at_k'],
+                'file_recall_at_k': metrics['file_recall_at_k'],
+                'module_recall_at_k': metrics['module_recall_at_k'],
+                'entity_recall_at_k': metrics['entity_recall_at_k'],
+                'file_f1_at_k': metrics['file_f1_at_k'],
+                'module_f1_at_k': metrics['module_f1_at_k'],
+                'entity_f1_at_k': metrics['entity_f1_at_k'],
             },
             'counts': {
                 'total_instances': metrics['total_instances'],

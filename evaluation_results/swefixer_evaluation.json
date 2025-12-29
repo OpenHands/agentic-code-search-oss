@@ -4,6 +4,24 @@
   "benchmark": "SWE-Bench Lite",
   "metrics": {
     "file_f1": 0.6916666666666667,
+    "file_acc_at_k": {
+      "1": 0.69,
+      "3": 0.6933333333333334,
+      "5": 0.6933333333333334,
+      "10": 0.6933333333333334
+    },
+    "file_recall_at_k": {
+      "1": 0.69,
+      "3": 0.6933333333333334,
+      "5": 0.6933333333333334,
+      "10": 0.6933333333333334
+    },
+    "file_f1_at_k": {
+      "1": 0.69,
+      "3": 0.6916666666666667,
+      "5": 0.6916666666666667,
+      "10": 0.6916666666666667
+    },
     "module_f1": null,
     "entity_f1": null
   },
@@ -21,7 +39,15 @@
       ],
       "gt_files": [
         "astropy/modeling/separable.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "astropy__astropy-14182",
@@ -31,7 +57,15 @@
       ],
       "gt_files": [
         "astropy/io/ascii/rst.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "astropy__astropy-14365",
@@ -41,7 +75,15 @@
       ],
       "gt_files": [
         "astropy/io/ascii/qdp.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "astropy__astropy-14995",
@@ -51,7 +93,15 @@
       ],
       "gt_files": [
         "astropy/nddata/mixins/ndarithmetic.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "astropy__astropy-6938",
@@ -61,7 +111,15 @@
       ],
       "gt_files": [
         "astropy/io/fits/fitsrec.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "astropy__astropy-7746",
@@ -71,7 +129,15 @@
       ],
       "gt_files": [
         "astropy/wcs/wcs.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11133",
@@ -81,7 +147,15 @@
       ],
       "gt_files": [
         "django/http/response.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11179",
@@ -91,7 +165,15 @@
       ],
       "gt_files": [
         "django/db/models/deletion.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11283",
@@ -101,7 +183,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/migrations/0011_update_proxy_permissions.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11422",
@@ -111,7 +201,15 @@
       ],
       "gt_files": [
         "django/utils/autoreload.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11564",
@@ -121,7 +219,15 @@
       ],
       "gt_files": [
         "django/conf/__init__.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11583",
@@ -131,7 +237,15 @@
       ],
       "gt_files": [
         "django/utils/autoreload.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11620",
@@ -141,7 +255,15 @@
       ],
       "gt_files": [
         "django/views/debug.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11630",
@@ -151,7 +273,15 @@
       ],
       "gt_files": [
         "django/core/checks/model_checks.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11742",
@@ -161,7 +291,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11797",
@@ -171,7 +309,15 @@
       ],
       "gt_files": [
         "django/db/models/lookups.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11815",
@@ -181,7 +327,15 @@
       ],
       "gt_files": [
         "django/db/migrations/serializer.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11848",
@@ -191,7 +345,15 @@
       ],
       "gt_files": [
         "django/utils/http.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11905",
@@ -201,7 +363,15 @@
       ],
       "gt_files": [
         "django/db/models/lookups.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11910",
@@ -211,7 +381,15 @@
       ],
       "gt_files": [
         "django/db/migrations/autodetector.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11964",
@@ -221,7 +399,15 @@
       ],
       "gt_files": [
         "django/db/models/enums.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-11999",
@@ -231,7 +417,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12113",
@@ -241,7 +435,15 @@
       ],
       "gt_files": [
         "django/db/backends/sqlite3/creation.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-12125",
@@ -251,7 +453,15 @@
       ],
       "gt_files": [
         "django/db/migrations/serializer.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-12184",
@@ -261,7 +471,15 @@
       ],
       "gt_files": [
         "django/urls/resolvers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12284",
@@ -271,7 +489,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12286",
@@ -281,7 +507,15 @@
       ],
       "gt_files": [
         "django/core/checks/translation.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12308",
@@ -291,7 +525,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/utils.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12453",
@@ -301,7 +543,15 @@
       ],
       "gt_files": [
         "django/db/backends/base/creation.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12470",
@@ -311,7 +561,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/compiler.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12497",
@@ -321,7 +579,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/related.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12589",
@@ -331,7 +597,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-12700",
@@ -341,7 +615,15 @@
       ],
       "gt_files": [
         "django/views/debug.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12708",
@@ -351,7 +633,15 @@
       ],
       "gt_files": [
         "django/db/backends/base/schema.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12747",
@@ -361,7 +651,15 @@
       ],
       "gt_files": [
         "django/db/models/deletion.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-12856",
@@ -371,7 +669,15 @@
       ],
       "gt_files": [
         "django/db/models/base.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-12908",
@@ -381,7 +687,15 @@
       ],
       "gt_files": [
         "django/db/models/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12915",
@@ -391,7 +705,15 @@
       ],
       "gt_files": [
         "django/contrib/staticfiles/handlers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-12983",
@@ -401,7 +723,15 @@
       ],
       "gt_files": [
         "django/utils/text.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13028",
@@ -411,7 +741,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13033",
@@ -421,7 +759,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/compiler.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13158",
@@ -431,7 +777,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-13220",
@@ -441,7 +795,15 @@
       ],
       "gt_files": [
         "django/core/exceptions.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13230",
@@ -451,7 +813,15 @@
       ],
       "gt_files": [
         "django/contrib/syndication/views.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13265",
@@ -461,7 +831,15 @@
       ],
       "gt_files": [
         "django/db/migrations/autodetector.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-13315",
@@ -471,7 +849,15 @@
       ],
       "gt_files": [
         "django/forms/models.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-13321",
@@ -481,7 +867,15 @@
       ],
       "gt_files": [
         "django/contrib/sessions/backends/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13401",
@@ -491,7 +885,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13447",
@@ -501,7 +903,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/sites.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13448",
@@ -511,7 +921,15 @@
       ],
       "gt_files": [
         "django/db/backends/base/creation.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13551",
@@ -521,7 +939,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/tokens.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13590",
@@ -531,7 +957,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13658",
@@ -541,7 +975,15 @@
       ],
       "gt_files": [
         "django/core/management/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13660",
@@ -551,7 +993,15 @@
       ],
       "gt_files": [
         "django/core/management/commands/shell.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13710",
@@ -561,7 +1011,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/options.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13757",
@@ -571,7 +1029,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/json.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13768",
@@ -581,7 +1047,15 @@
       ],
       "gt_files": [
         "django/dispatch/dispatcher.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-13925",
@@ -591,7 +1065,15 @@
       ],
       "gt_files": [
         "django/db/models/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13933",
@@ -601,7 +1083,15 @@
       ],
       "gt_files": [
         "django/forms/models.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-13964",
@@ -611,7 +1101,15 @@
       ],
       "gt_files": [
         "django/db/models/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14016",
@@ -621,7 +1119,15 @@
       ],
       "gt_files": [
         "django/db/models/query_utils.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14017",
@@ -631,7 +1137,15 @@
       ],
       "gt_files": [
         "django/db/models/query_utils.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14155",
@@ -641,7 +1155,15 @@
       ],
       "gt_files": [
         "django/urls/resolvers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14238",
@@ -651,7 +1173,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-14382",
@@ -661,7 +1191,15 @@
       ],
       "gt_files": [
         "django/core/management/templates.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14411",
@@ -671,7 +1209,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/forms.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14534",
@@ -681,7 +1227,15 @@
       ],
       "gt_files": [
         "django/forms/boundfield.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14580",
@@ -691,7 +1245,15 @@
       ],
       "gt_files": [
         "django/db/migrations/serializer.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-14608",
@@ -701,7 +1263,15 @@
       ],
       "gt_files": [
         "django/forms/formsets.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-14667",
@@ -711,7 +1281,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14672",
@@ -721,7 +1299,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/reverse_related.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14730",
@@ -731,7 +1317,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/related.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14752",
@@ -741,7 +1335,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/views/autocomplete.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14787",
@@ -751,7 +1353,15 @@
       ],
       "gt_files": [
         "django/utils/decorators.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14855",
@@ -761,7 +1371,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/helpers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14915",
@@ -771,7 +1389,15 @@
       ],
       "gt_files": [
         "django/forms/models.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-14997",
@@ -781,7 +1407,15 @@
       ],
       "gt_files": [
         "django/db/backends/ddl_references.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-14999",
@@ -791,7 +1425,15 @@
       ],
       "gt_files": [
         "django/db/migrations/operations/models.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15061",
@@ -801,7 +1443,15 @@
       ],
       "gt_files": [
         "django/forms/widgets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15202",
@@ -811,7 +1461,15 @@
       ],
       "gt_files": [
         "django/core/validators.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15213",
@@ -821,7 +1479,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15252",
@@ -831,7 +1497,15 @@
       ],
       "gt_files": [
         "django/db/migrations/executor.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15320",
@@ -841,7 +1515,15 @@
       ],
       "gt_files": [
         "django/db/models/expressions.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15347",
@@ -851,7 +1533,15 @@
       ],
       "gt_files": [
         "django/contrib/messages/storage/cookie.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15388",
@@ -861,7 +1551,15 @@
       ],
       "gt_files": [
         "django/template/autoreload.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15400",
@@ -871,7 +1569,15 @@
       ],
       "gt_files": [
         "django/utils/functional.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15498",
@@ -881,7 +1587,15 @@
       ],
       "gt_files": [
         "django/views/static.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15695",
@@ -891,7 +1605,15 @@
       ],
       "gt_files": [
         "django/db/migrations/operations/models.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15738",
@@ -901,7 +1623,15 @@
       ],
       "gt_files": [
         "django/db/migrations/autodetector.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15781",
@@ -911,7 +1641,15 @@
       ],
       "gt_files": [
         "django/core/management/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15789",
@@ -921,7 +1659,15 @@
       ],
       "gt_files": [
         "django/utils/html.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15790",
@@ -931,7 +1677,15 @@
       ],
       "gt_files": [
         "django/core/checks/templates.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15814",
@@ -941,7 +1695,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15819",
@@ -951,7 +1713,15 @@
       ],
       "gt_files": [
         "django/core/management/commands/inspectdb.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15851",
@@ -961,7 +1731,15 @@
       ],
       "gt_files": [
         "django/db/backends/postgresql/client.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-15902",
@@ -971,7 +1749,15 @@
       ],
       "gt_files": [
         "django/forms/formsets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-15996",
@@ -981,7 +1767,15 @@
       ],
       "gt_files": [
         "django/db/migrations/serializer.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16041",
@@ -991,7 +1785,15 @@
       ],
       "gt_files": [
         "django/forms/formsets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16046",
@@ -1001,7 +1803,15 @@
       ],
       "gt_files": [
         "django/utils/numberformat.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16139",
@@ -1011,7 +1821,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/forms.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16229",
@@ -1021,7 +1839,15 @@
       ],
       "gt_files": [
         "django/forms/boundfield.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16255",
@@ -1031,7 +1857,15 @@
       ],
       "gt_files": [
         "django/contrib/sitemaps/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16379",
@@ -1041,7 +1875,15 @@
       ],
       "gt_files": [
         "django/core/cache/backends/filebased.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16400",
@@ -1051,7 +1893,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/management/__init__.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16408",
@@ -1061,7 +1911,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/compiler.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16527",
@@ -1071,7 +1929,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/templatetags/admin_modify.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16595",
@@ -1081,7 +1947,15 @@
       ],
       "gt_files": [
         "django/db/migrations/operations/fields.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16816",
@@ -1091,7 +1965,15 @@
       ],
       "gt_files": [
         "django/contrib/admin/checks.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16820",
@@ -1101,7 +1983,15 @@
       ],
       "gt_files": [
         "django/db/migrations/operations/models.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-16873",
@@ -1111,7 +2001,15 @@
       ],
       "gt_files": [
         "django/template/defaultfilters.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-16910",
@@ -1121,7 +2019,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/query.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "django__django-17051",
@@ -1131,7 +2037,15 @@
       ],
       "gt_files": [
         "django/db/models/query.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-17087",
@@ -1141,7 +2055,15 @@
       ],
       "gt_files": [
         "django/db/migrations/serializer.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-18869",
@@ -1151,7 +2073,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-22711",
@@ -1161,7 +2091,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/widgets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-22835",
@@ -1171,7 +2109,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/artist.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23299",
@@ -1181,7 +2127,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23314",
@@ -1191,7 +2145,15 @@
       ],
       "gt_files": [
         "lib/mpl_toolkits/mplot3d/axes3d.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23476",
@@ -1201,7 +2163,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/figure.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23562",
@@ -1211,7 +2181,15 @@
       ],
       "gt_files": [
         "lib/mpl_toolkits/mplot3d/art3d.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23563",
@@ -1221,7 +2199,15 @@
       ],
       "gt_files": [
         "lib/mpl_toolkits/mplot3d/art3d.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23913",
@@ -1231,7 +2217,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/legend.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23964",
@@ -1241,7 +2235,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/backends/backend_ps.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-23987",
@@ -1251,7 +2253,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/figure.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-24149",
@@ -1261,7 +2271,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/axes/_axes.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-24265",
@@ -1271,7 +2289,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/style/core.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-24334",
@@ -1281,7 +2307,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/axis.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-24970",
@@ -1291,7 +2325,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/colors.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25079",
@@ -1301,7 +2343,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/colors.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25311",
@@ -1311,7 +2361,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/offsetbox.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25332",
@@ -1321,7 +2379,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/cbook.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25433",
@@ -1331,7 +2397,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/figure.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25442",
@@ -1341,7 +2415,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/offsetbox.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-25498",
@@ -1351,7 +2433,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/colorbar.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "matplotlib__matplotlib-26011",
@@ -1361,7 +2451,15 @@
       ],
       "gt_files": [
         "lib/matplotlib/axis.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "matplotlib__matplotlib-26020",
@@ -1371,7 +2469,15 @@
       ],
       "gt_files": [
         "lib/mpl_toolkits/axes_grid1/axes_grid.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "mwaskom__seaborn-2848",
@@ -1381,7 +2487,15 @@
       ],
       "gt_files": [
         "seaborn/_oldcore.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "mwaskom__seaborn-3010",
@@ -1391,7 +2505,15 @@
       ],
       "gt_files": [
         "seaborn/_stats/regression.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "mwaskom__seaborn-3190",
@@ -1401,7 +2523,15 @@
       ],
       "gt_files": [
         "seaborn/_core/scales.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "mwaskom__seaborn-3407",
@@ -1411,7 +2541,15 @@
       ],
       "gt_files": [
         "seaborn/axisgrid.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pallets__flask-5063",
@@ -1421,7 +2559,15 @@
       ],
       "gt_files": [
         "src/flask/cli.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "psf__requests-1963",
@@ -1431,7 +2577,15 @@
       ],
       "gt_files": [
         "requests/sessions.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "psf__requests-2148",
@@ -1441,7 +2595,15 @@
       ],
       "gt_files": [
         "requests/models.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "psf__requests-2317",
@@ -1451,7 +2613,15 @@
       ],
       "gt_files": [
         "requests/sessions.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "psf__requests-2674",
@@ -1461,7 +2631,15 @@
       ],
       "gt_files": [
         "requests/adapters.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "psf__requests-3362",
@@ -1471,7 +2649,15 @@
       ],
       "gt_files": [
         "requests/utils.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "psf__requests-863",
@@ -1481,7 +2667,15 @@
       ],
       "gt_files": [
         "requests/models.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pydata__xarray-4094",
@@ -1491,7 +2685,15 @@
       ],
       "gt_files": [
         "xarray/core/dataarray.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pydata__xarray-4248",
@@ -1501,7 +2703,15 @@
       ],
       "gt_files": [
         "xarray/core/formatting.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pydata__xarray-4493",
@@ -1511,7 +2721,15 @@
       ],
       "gt_files": [
         "xarray/core/variable.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pydata__xarray-5131",
@@ -1521,7 +2739,15 @@
       ],
       "gt_files": [
         "xarray/core/groupby.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pylint-dev__pylint-7080",
@@ -1531,7 +2757,15 @@
       ],
       "gt_files": [
         "pylint/lint/expand_modules.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pylint-dev__pylint-7114",
@@ -1541,7 +2775,15 @@
       ],
       "gt_files": [
         "pylint/lint/expand_modules.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pylint-dev__pylint-7228",
@@ -1551,7 +2793,15 @@
       ],
       "gt_files": [
         "pylint/config/argument.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pylint-dev__pylint-7993",
@@ -1561,7 +2811,15 @@
       ],
       "gt_files": [
         "pylint/reporters/text.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-5227",
@@ -1571,7 +2829,15 @@
       ],
       "gt_files": [
         "src/_pytest/logging.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-5413",
@@ -1581,7 +2847,15 @@
       ],
       "gt_files": [
         "src/_pytest/_code/code.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-5495",
@@ -1591,7 +2865,15 @@
       ],
       "gt_files": [
         "src/_pytest/assertion/util.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-5692",
@@ -1601,7 +2883,15 @@
       ],
       "gt_files": [
         "src/_pytest/junitxml.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-6116",
@@ -1611,7 +2901,15 @@
       ],
       "gt_files": [
         "src/_pytest/main.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pytest-dev__pytest-7168",
@@ -1621,7 +2919,15 @@
       ],
       "gt_files": [
         "src/_pytest/_io/saferepr.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-7220",
@@ -1631,7 +2937,15 @@
       ],
       "gt_files": [
         "src/_pytest/nodes.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-7373",
@@ -1641,7 +2955,15 @@
       ],
       "gt_files": [
         "src/_pytest/mark/evaluate.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-7432",
@@ -1651,7 +2973,15 @@
       ],
       "gt_files": [
         "src/_pytest/skipping.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-7490",
@@ -1661,7 +2991,15 @@
       ],
       "gt_files": [
         "src/_pytest/skipping.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-8365",
@@ -1671,7 +3009,15 @@
       ],
       "gt_files": [
         "src/_pytest/tmpdir.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-8906",
@@ -1681,7 +3027,15 @@
       ],
       "gt_files": [
         "src/_pytest/python.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pytest-dev__pytest-9359",
@@ -1691,19 +3045,35 @@
       ],
       "gt_files": [
         "src/_pytest/_code/source.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13496",
       "file_f1": 0.5,
       "pred_files": [
-        "sklearn/ensemble/iforest.py",
         "sklearn/ensemble/bagging.py",
-        "sklearn/ensemble/forest.py"
+        "sklearn/ensemble/forest.py",
+        "sklearn/ensemble/iforest.py"
       ],
       "gt_files": [
         "sklearn/ensemble/iforest.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 0.5,
+      "file_acc@5": 1.0,
+      "file_f1@5": 0.5,
+      "file_acc@10": 1.0,
+      "file_f1@10": 0.5
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13497",
@@ -1713,7 +3083,15 @@
       ],
       "gt_files": [
         "sklearn/feature_selection/mutual_info_.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13584",
@@ -1723,7 +3101,15 @@
       ],
       "gt_files": [
         "sklearn/utils/_pprint.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13779",
@@ -1733,7 +3119,15 @@
       ],
       "gt_files": [
         "sklearn/ensemble/voting.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-14087",
@@ -1743,7 +3137,15 @@
       ],
       "gt_files": [
         "sklearn/linear_model/logistic.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-14092",
@@ -1753,7 +3155,15 @@
       ],
       "gt_files": [
         "sklearn/neighbors/nca.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-14894",
@@ -1763,7 +3173,15 @@
       ],
       "gt_files": [
         "sklearn/svm/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-14983",
@@ -1773,7 +3191,15 @@
       ],
       "gt_files": [
         "sklearn/model_selection/_split.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-15512",
@@ -1783,7 +3209,15 @@
       ],
       "gt_files": [
         "sklearn/cluster/_affinity_propagation.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-15535",
@@ -1793,7 +3227,15 @@
       ],
       "gt_files": [
         "sklearn/metrics/cluster/_supervised.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-25500",
@@ -1803,7 +3245,15 @@
       ],
       "gt_files": [
         "sklearn/isotonic.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-25570",
@@ -1813,7 +3263,15 @@
       ],
       "gt_files": [
         "sklearn/compose/_column_transformer.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-25638",
@@ -1823,7 +3281,15 @@
       ],
       "gt_files": [
         "sklearn/utils/multiclass.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-25747",
@@ -1833,7 +3299,15 @@
       ],
       "gt_files": [
         "sklearn/utils/_set_output.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-10325",
@@ -1843,7 +3317,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-10451",
@@ -1853,7 +3335,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/typehints.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-11445",
@@ -1863,7 +3353,15 @@
       ],
       "gt_files": [
         "sphinx/util/rst.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-7686",
@@ -1873,7 +3371,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autosummary/generate.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-7738",
@@ -1883,7 +3389,15 @@
       ],
       "gt_files": [
         "sphinx/ext/napoleon/docstring.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-7975",
@@ -1893,7 +3407,15 @@
       ],
       "gt_files": [
         "sphinx/environment/adapters/indexentries.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8273",
@@ -1903,7 +3425,15 @@
       ],
       "gt_files": [
         "sphinx/builders/manpage.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8282",
@@ -1913,7 +3443,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8435",
@@ -1923,7 +3461,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8474",
@@ -1934,7 +3480,15 @@
       ],
       "gt_files": [
         "sphinx/domains/std.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8506",
@@ -1944,7 +3498,15 @@
       ],
       "gt_files": [
         "sphinx/domains/std.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8595",
@@ -1954,7 +3516,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8627",
@@ -1964,7 +3534,15 @@
       ],
       "gt_files": [
         "sphinx/util/typing.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8713",
@@ -1974,7 +3552,15 @@
       ],
       "gt_files": [
         "sphinx/ext/napoleon/docstring.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8721",
@@ -1984,7 +3570,15 @@
       ],
       "gt_files": [
         "sphinx/ext/viewcode.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sphinx-doc__sphinx-8801",
@@ -1994,7 +3588,15 @@
       ],
       "gt_files": [
         "sphinx/ext/autodoc/importer.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-11400",
@@ -2004,7 +3606,15 @@
       ],
       "gt_files": [
         "sympy/printing/ccode.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-11870",
@@ -2014,7 +3624,15 @@
       ],
       "gt_files": [
         "sympy/functions/elementary/trigonometric.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-11897",
@@ -2024,7 +3642,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-12171",
@@ -2034,7 +3660,15 @@
       ],
       "gt_files": [
         "sympy/printing/mathematica.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-12236",
@@ -2044,7 +3678,15 @@
       ],
       "gt_files": [
         "sympy/polys/domains/polynomialring.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-12419",
@@ -2054,7 +3696,15 @@
       ],
       "gt_files": [
         "sympy/matrices/expressions/matexpr.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-12454",
@@ -2064,7 +3714,15 @@
       ],
       "gt_files": [
         "sympy/matrices/matrices.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-12481",
@@ -2074,7 +3732,15 @@
       ],
       "gt_files": [
         "sympy/combinatorics/permutations.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13031",
@@ -2084,7 +3750,15 @@
       ],
       "gt_files": [
         "sympy/matrices/sparse.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13043",
@@ -2094,7 +3768,15 @@
       ],
       "gt_files": [
         "sympy/integrals/intpoly.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13146",
@@ -2104,7 +3786,15 @@
       ],
       "gt_files": [
         "sympy/core/operations.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13177",
@@ -2114,7 +3804,15 @@
       ],
       "gt_files": [
         "sympy/core/mod.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13437",
@@ -2124,7 +3822,15 @@
       ],
       "gt_files": [
         "sympy/functions/combinatorial/numbers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13471",
@@ -2134,7 +3840,15 @@
       ],
       "gt_files": [
         "sympy/core/numbers.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13480",
@@ -2144,7 +3858,15 @@
       ],
       "gt_files": [
         "sympy/functions/elementary/hyperbolic.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13647",
@@ -2154,7 +3876,15 @@
       ],
       "gt_files": [
         "sympy/matrices/common.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13773",
@@ -2164,7 +3894,15 @@
       ],
       "gt_files": [
         "sympy/matrices/common.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-13895",
@@ -2174,7 +3912,15 @@
       ],
       "gt_files": [
         "sympy/core/numbers.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13915",
@@ -2184,7 +3930,15 @@
       ],
       "gt_files": [
         "sympy/core/mul.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-13971",
@@ -2194,7 +3948,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-14024",
@@ -2204,7 +3966,15 @@
       ],
       "gt_files": [
         "sympy/core/numbers.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-14308",
@@ -2214,7 +3984,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-14317",
@@ -2224,7 +4002,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-14396",
@@ -2234,7 +4020,15 @@
       ],
       "gt_files": [
         "sympy/polys/polyoptions.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-14774",
@@ -2244,7 +4038,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-14817",
@@ -2254,7 +4056,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-15011",
@@ -2264,7 +4074,15 @@
       ],
       "gt_files": [
         "sympy/utilities/lambdify.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-15308",
@@ -2274,7 +4092,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-15345",
@@ -2284,7 +4110,15 @@
       ],
       "gt_files": [
         "sympy/printing/mathematica.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-15346",
@@ -2294,7 +4128,15 @@
       ],
       "gt_files": [
         "sympy/simplify/trigsimp.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-15609",
@@ -2304,7 +4146,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-15678",
@@ -2314,7 +4164,15 @@
       ],
       "gt_files": [
         "sympy/geometry/util.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-16106",
@@ -2324,7 +4182,15 @@
       ],
       "gt_files": [
         "sympy/printing/mathml.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-16281",
@@ -2334,7 +4200,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-16503",
@@ -2344,7 +4218,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-16792",
@@ -2354,7 +4236,15 @@
       ],
       "gt_files": [
         "sympy/utilities/codegen.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-16988",
@@ -2364,7 +4254,15 @@
       ],
       "gt_files": [
         "sympy/sets/sets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-17022",
@@ -2374,7 +4272,15 @@
       ],
       "gt_files": [
         "sympy/printing/pycode.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-17139",
@@ -2384,7 +4290,15 @@
       ],
       "gt_files": [
         "sympy/simplify/fu.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-17630",
@@ -2394,7 +4308,15 @@
       ],
       "gt_files": [
         "sympy/matrices/expressions/matexpr.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-17655",
@@ -2404,7 +4326,15 @@
       ],
       "gt_files": [
         "sympy/geometry/point.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18057",
@@ -2414,7 +4344,15 @@
       ],
       "gt_files": [
         "sympy/core/expr.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18087",
@@ -2424,7 +4362,15 @@
       ],
       "gt_files": [
         "sympy/core/exprtools.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-18189",
@@ -2434,7 +4380,15 @@
       ],
       "gt_files": [
         "sympy/solvers/diophantine.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18199",
@@ -2444,7 +4398,15 @@
       ],
       "gt_files": [
         "sympy/ntheory/residue_ntheory.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18532",
@@ -2454,7 +4416,15 @@
       ],
       "gt_files": [
         "sympy/core/basic.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18621",
@@ -2464,7 +4434,15 @@
       ],
       "gt_files": [
         "sympy/matrices/expressions/blockmatrix.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18698",
@@ -2474,7 +4452,15 @@
       ],
       "gt_files": [
         "sympy/polys/polytools.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-18835",
@@ -2484,7 +4470,15 @@
       ],
       "gt_files": [
         "sympy/utilities/iterables.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-19007",
@@ -2494,7 +4488,15 @@
       ],
       "gt_files": [
         "sympy/matrices/expressions/blockmatrix.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-19254",
@@ -2504,7 +4506,15 @@
       ],
       "gt_files": [
         "sympy/polys/factortools.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-19487",
@@ -2514,7 +4524,15 @@
       ],
       "gt_files": [
         "sympy/functions/elementary/complexes.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-20049",
@@ -2524,7 +4542,15 @@
       ],
       "gt_files": [
         "sympy/physics/vector/point.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-20154",
@@ -2534,7 +4560,15 @@
       ],
       "gt_files": [
         "sympy/utilities/iterables.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-20212",
@@ -2544,7 +4578,15 @@
       ],
       "gt_files": [
         "sympy/core/power.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-20322",
@@ -2554,7 +4596,15 @@
       ],
       "gt_files": [
         "sympy/core/mul.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-20442",
@@ -2564,7 +4614,15 @@
       ],
       "gt_files": [
         "sympy/physics/units/util.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-20590",
@@ -2574,7 +4632,15 @@
       ],
       "gt_files": [
         "sympy/core/_print_helpers.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-20639",
@@ -2584,7 +4650,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-21055",
@@ -2594,7 +4668,15 @@
       ],
       "gt_files": [
         "sympy/assumptions/refine.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-21171",
@@ -2604,7 +4686,15 @@
       ],
       "gt_files": [
         "sympy/printing/latex.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-21379",
@@ -2614,7 +4704,15 @@
       ],
       "gt_files": [
         "sympy/core/mod.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-21612",
@@ -2624,7 +4722,15 @@
       ],
       "gt_files": [
         "sympy/printing/str.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-21614",
@@ -2634,7 +4740,15 @@
       ],
       "gt_files": [
         "sympy/core/function.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-21627",
@@ -2644,7 +4758,15 @@
       ],
       "gt_files": [
         "sympy/functions/elementary/complexes.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-21847",
@@ -2654,7 +4776,15 @@
       ],
       "gt_files": [
         "sympy/polys/monomials.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-22005",
@@ -2664,7 +4794,15 @@
       ],
       "gt_files": [
         "sympy/solvers/polysys.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-22714",
@@ -2674,7 +4812,15 @@
       ],
       "gt_files": [
         "sympy/geometry/point.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-22840",
@@ -2684,7 +4830,15 @@
       ],
       "gt_files": [
         "sympy/simplify/cse_main.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-23117",
@@ -2694,7 +4848,15 @@
       ],
       "gt_files": [
         "sympy/tensor/array/ndim_array.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-23191",
@@ -2704,7 +4866,15 @@
       ],
       "gt_files": [
         "sympy/printing/pretty/pretty.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-23262",
@@ -2714,7 +4884,15 @@
       ],
       "gt_files": [
         "sympy/utilities/lambdify.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-24066",
@@ -2724,7 +4902,15 @@
       ],
       "gt_files": [
         "sympy/physics/units/unitsystem.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-24102",
@@ -2734,7 +4920,15 @@
       ],
       "gt_files": [
         "sympy/parsing/mathematica.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-24152",
@@ -2744,7 +4938,15 @@
       ],
       "gt_files": [
         "sympy/physics/quantum/tensorproduct.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "sympy__sympy-24213",
@@ -2754,7 +4956,15 @@
       ],
       "gt_files": [
         "sympy/physics/units/unitsystem.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "sympy__sympy-24909",
@@ -2764,7 +4974,15 @@
       ],
       "gt_files": [
         "sympy/physics/units/prefixes.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-10914",
@@ -2774,7 +4992,15 @@
       ],
       "gt_files": [
         "django/conf/global_settings.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-10924",
@@ -2784,7 +5010,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11001",
@@ -2794,7 +5028,15 @@
       ],
       "gt_files": [
         "django/db/models/sql/compiler.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11019",
@@ -2804,7 +5046,15 @@
       ],
       "gt_files": [
         "django/forms/widgets.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11039",
@@ -2814,7 +5064,15 @@
       ],
       "gt_files": [
         "django/core/management/commands/sqlmigrate.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11049",
@@ -2824,7 +5082,15 @@
       ],
       "gt_files": [
         "django/db/models/fields/__init__.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "django__django-11099",
@@ -2834,7 +5100,15 @@
       ],
       "gt_files": [
         "django/contrib/auth/validators.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pallets__flask-4045",
@@ -2844,7 +5118,15 @@
       ],
       "gt_files": [
         "src/flask/blueprints.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pallets__flask-4992",
@@ -2854,7 +5136,15 @@
       ],
       "gt_files": [
         "src/flask/config.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pydata__xarray-3364",
@@ -2864,7 +5154,15 @@
       ],
       "gt_files": [
         "xarray/core/concat.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pylint-dev__pylint-5859",
@@ -2874,7 +5172,15 @@
       ],
       "gt_files": [
         "pylint/checkers/misc.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pylint-dev__pylint-6506",
@@ -2884,7 +5190,15 @@
       ],
       "gt_files": [
         "pylint/config/config_initialization.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-11143",
@@ -2894,7 +5208,15 @@
       ],
       "gt_files": [
         "src/_pytest/assertion/rewrite.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pytest-dev__pytest-11148",
@@ -2904,7 +5226,15 @@
       ],
       "gt_files": [
         "src/_pytest/pathlib.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "pytest-dev__pytest-5103",
@@ -2914,7 +5244,15 @@
       ],
       "gt_files": [
         "src/_pytest/assertion/rewrite.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "pytest-dev__pytest-5221",
@@ -2924,7 +5262,15 @@
       ],
       "gt_files": [
         "src/_pytest/python.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-10297",
@@ -2934,7 +5280,15 @@
       ],
       "gt_files": [
         "sklearn/linear_model/ridge.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-10508",
@@ -2944,7 +5298,15 @@
       ],
       "gt_files": [
         "sklearn/preprocessing/label.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-10949",
@@ -2954,7 +5316,15 @@
       ],
       "gt_files": [
         "sklearn/utils/validation.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-11040",
@@ -2964,7 +5334,15 @@
       ],
       "gt_files": [
         "sklearn/neighbors/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-11281",
@@ -2974,7 +5352,15 @@
       ],
       "gt_files": [
         "sklearn/mixture/base.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-12471",
@@ -2984,7 +5370,15 @@
       ],
       "gt_files": [
         "sklearn/preprocessing/_encoders.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13142",
@@ -2994,7 +5388,15 @@
       ],
       "gt_files": [
         "sklearn/mixture/base.py"
-      ]
+      ],
+      "file_acc@1": 0.0,
+      "file_f1@1": 0.0,
+      "file_acc@3": 0.0,
+      "file_f1@3": 0.0,
+      "file_acc@5": 0.0,
+      "file_f1@5": 0.0,
+      "file_acc@10": 0.0,
+      "file_f1@10": 0.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13241",
@@ -3004,7 +5406,15 @@
       ],
       "gt_files": [
         "sklearn/decomposition/kernel_pca.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     },
     {
       "instance_id": "scikit-learn__scikit-learn-13439",
@@ -3014,7 +5424,15 @@
       ],
       "gt_files": [
         "sklearn/pipeline.py"
-      ]
+      ],
+      "file_acc@1": 1.0,
+      "file_f1@1": 1.0,
+      "file_acc@3": 1.0,
+      "file_f1@3": 1.0,
+      "file_acc@5": 1.0,
+      "file_f1@5": 1.0,
+      "file_acc@10": 1.0,
+      "file_f1@10": 1.0
     }
   ]
 }

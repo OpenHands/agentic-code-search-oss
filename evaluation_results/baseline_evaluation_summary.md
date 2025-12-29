@@ -4,10 +4,12 @@ This document summarizes the evaluation of baseline methods (LocAgent and SWE-Fi
 
 ## Overview
 
-| Method | Model | File F1 | Module F1 | Entity/Function F1 | Notes |
-|--------|-------|---------|-----------|-------------------|-------|
-| LocAgent | Claude 3.5 | 0.4348 | 0.3402 | 0.1975 | Full multi-level localization |
-| SWE-Fixer | Qwen2.5-7B/72B | 0.6917 | N/A | N/A | File-level only |
+| Method | Model | File F1 | File F1@1 | File Acc@1 | Module F1 | Entity F1 | Notes |
+|--------|-------|---------|-----------|------------|-----------|-----------|-------|
+| LocAgent | Claude 3.5 | 0.4348 | **0.7733** | 0.7733 | 0.3402 | 0.1975 | Full multi-level localization |
+| SWE-Fixer | Qwen2.5-7B/72B | 0.6917 | 0.6900 | 0.6900 | N/A | N/A | File-level only |
+
+**Key Insight**: LocAgent's F1 (0.4348) is lower than SWE-Fixer's (0.6917) because LocAgent over-predicts files (avg 4.09 files vs 1.0 GT). However, when using only the top-1 prediction (F1@1), LocAgent achieves **0.7733**, which is higher than SWE-Fixer.
 
 ## LocAgent (arXiv:2503.09089)
 
@@ -21,20 +23,29 @@ LocAgent uses a graph-guided LLM agent framework for code localization. It:
 
 ### Results on SWE-Bench Lite (300 instances)
 
-Using our F1 evaluation metrics:
-- **File-level F1**: 0.4348
-- **Module-level F1**: 0.3402 (297 instances with module GT)
-- **Entity-level F1**: 0.1975 (297 instances with entity GT)
+#### F1 Scores (using all predictions)
+| Level | F1 | Instances |
+|-------|-----|-----------|
+| File | 0.4348 | 300 |
+| Module | 0.3402 | 297 |
+| Entity | 0.1975 | 297 |
 
-Using LocAgent's official Acc@k metrics:
+#### Acc@k Metrics (any GT in top-k)
 | Level | Acc@1 | Acc@3 | Acc@5 | Acc@10 |
 |-------|-------|-------|-------|--------|
-| File | 0.7774 | 0.9197 | 0.9416 | - |
-| Module | - | - | 0.8650 | 0.8759 |
-| Function | - | - | 0.7336 | 0.7737 |
+| File | 0.7733 | 0.9133 | 0.9367 | 0.9433 |
+| Module | 0.6599 | 0.8316 | 0.8721 | 0.8822 |
+| Entity | 0.5084 | 0.7542 | 0.7980 | 0.8316 |
+
+#### F1@k Scores (using only top-k predictions)
+| Level | F1@1 | F1@3 | F1@5 | F1@10 |
+|-------|------|------|------|-------|
+| File | **0.7733** | 0.5144 | 0.4453 | 0.4348 |
+| Module | **0.6453** | 0.4505 | 0.3716 | 0.3411 |
+| Entity | **0.4778** | 0.3892 | 0.3008 | 0.2216 |
 
 ### Localization Output Format
-LocAgent provides structured predictions:
+LocAgent provides structured predictions (ordered by relevance):
 ```json
 {
   "found_files": ["path/to/file.py"],
@@ -56,10 +67,14 @@ SWE-Fixer uses a pipeline-based approach with two components:
 
 ### Results on SWE-Bench Lite (300 instances)
 
-Using our F1 evaluation metrics:
-- **File-level F1**: 0.6917
-- **Module-level F1**: N/A (not predicted)
-- **Entity-level F1**: N/A (not predicted)
+#### File-level Metrics
+| Metric | Value |
+|--------|-------|
+| F1 | 0.6917 |
+| Acc@1 | 0.6900 |
+| Recall@1 | 0.6900 |
+
+Note: SWE-Fixer typically predicts only 1 file per instance (from the final patch), so F1@k metrics are nearly identical across all k values.
 
 ### Why No Module/Function Predictions?
 From the paper:
@@ -71,17 +86,23 @@ The retriever only identifies which files need modification. The editor then gen
 
 1. **LocAgent provides full multi-level localization** (file, module, function) while **SWE-Fixer only provides file-level**.
 
-2. **SWE-Fixer has higher file-level F1** (0.6917 vs 0.4348) but this is because it's evaluated on the final patch output, which may benefit from the editor's ability to correct retrieval errors.
+2. **LocAgent over-predicts files** (avg 4.09 files per instance vs 1.0 GT), which hurts F1 but not Acc@k.
 
-3. **LocAgent's Acc@k metrics are much higher than F1** because Acc@k measures if any correct prediction is in top-k, while F1 penalizes both false positives and false negatives.
+3. **Using top-1 predictions improves LocAgent's F1 significantly**:
+   - File F1@1: 0.7733 (vs 0.4348 with all predictions)
+   - Module F1@1: 0.6453 (vs 0.3402)
+   - Entity F1@1: 0.4778 (vs 0.1975)
 
-4. **For module/function level evaluation**, only LocAgent results are available. SWE-Fixer's architecture doesn't produce these predictions.
+4. **SWE-Fixer's file predictions come from the final patch**, not intermediate retrieval, which may benefit from the editor's ability to correct retrieval errors.
+
+5. **For module/function level evaluation**, only LocAgent results are available. SWE-Fixer's architecture doesn't produce these predictions.
 
 ## Recommendations
 
 1. For comparing module/function localization, use LocAgent as the baseline.
 2. For file-level comparison, both methods can be used.
-3. Consider that SWE-Fixer's file predictions come from the final patch, not intermediate retrieval.
+3. Consider using F1@1 or F1@k metrics when comparing methods that produce ranked predictions.
+4. LocAgent's predictions could potentially be improved by thresholding to top-k predictions.
 
 ## Files
 
