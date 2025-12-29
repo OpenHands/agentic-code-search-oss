@@ -1,0 +1,20 @@
+name: "Weighted F1"
+description: "Don't use thinking"
+
+reward:
+  - fn: multilevel_localization_f1_reward
+    args:
+      file_level_weight: 1.0
+      module_level_weight: 0.5
+      entity_level_weight: 0.25
+  - fn: format_reward
+  - fn: tool_use_reward
+
+tools:
+  - glob
+  - grep
+  - terminal
+
+prompts:
+  system_prompt: "templates/system_prompt_short.j2"
+  user_prompt: "templates/file_module_no_think.j2"

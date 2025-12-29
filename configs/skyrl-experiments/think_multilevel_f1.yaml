@@ -1,0 +1,16 @@
+name: "Multilevel F1 with No Thinking"
+description: "Don't use thinking"
+
+reward:
+  - fn: multilevel_localization_f1_reward
+  - fn: format_reward
+  - fn: tool_use_reward
+
+tools:
+  - glob
+  - grep
+  - terminal
+
+prompts:
+  system_prompt: "templates/system_prompt_short.j2"
+  user_prompt: "templates/file_module.j2"
