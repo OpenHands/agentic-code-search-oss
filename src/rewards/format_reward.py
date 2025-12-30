@@ -12,14 +12,14 @@ def format_reward(
     tool_pattern: str = r"<(glob|grep|terminal)>",
     eos_hygiene_reward: float = 0.05,
     balanced_think_reward: float = 0.05,
-    final_content_no_tool_reward: float = 0.10,
-    min_final_content_length: int = 10,
+    final_message_no_tool_reward: float = 0.10,
+    min_final_message_length: int = 10,
     **kwargs,
 ) -> Tuple[float, dict]:
     """
     Non-negative format reward. Adds bonuses only (no penalties):
     (1) EOS hygiene (no <|endoftext|> leak), (2) balanced <think> tags,
-    (3) final turn has content and no tool calls.
+    (3) final message has content and no tool calls.
     """
     reward_value = 0.0
     reward_dict = {}
@@ -40,10 +40,10 @@ def format_reward(
     # (3) Final answer validity: reward clean hand-off (no tool calls, has content)
     has_tool = bool(re.search(tool_pattern, final_message))
     # Check if the final message has content and is not empty to avoid rewarding empty final messages
-    has_content = len(final_message.strip()) > min_final_content_length
+    has_content = len(final_message.strip()) > min_final_message_length
     if has_content and not has_tool:
-        reward_value += final_content_no_tool_reward
-        reward_dict["final_content_no_tool_reward"] = final_content_no_tool_reward
+        reward_value += final_message_no_tool_reward
+        reward_dict["final_message_no_tool_reward"] = final_message_no_tool_reward
 
     reward_dict["format_reward"] = reward_value
     return reward_value, reward_dict
