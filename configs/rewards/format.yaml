@@ -1,5 +1,4 @@
 reward:
   - fn: format_reward
     args:
-      is_final_turn: true
       tool_pattern: "<(glob|grep|terminal)>"
