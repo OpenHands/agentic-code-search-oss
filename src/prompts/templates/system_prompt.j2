@@ -38,37 +38,49 @@ You are given access to the codebase in a linux file system.
 
 ### Submitting Your Answer (REQUIRED)
 
-When you have identified all relevant locations, use the `finish` tool to submit your results.
+When you have identified all relevant locations, use the `localization_finish` tool to submit your results.
 
 **Format Requirements:**
-- Wrap your answer in triple backticks ``` ... ```
-- Each location must start with a file path (ending in .py)
-- Class name is OPTIONAL - include only if the change is within a specific class
-- Function name is OPTIONAL - include only if the change is at function/method level
+Submit a structured list of locations. Each location is a JSON object with:
+- `file`: Path to the file (REQUIRED)
+- `class_name`: Class name (OPTIONAL - omit for file-level or standalone functions)
+- `function_name`: Function/method name (OPTIONAL - omit for file-level or class-level only)
 
 **When to include what:**
-- File-level changes (imports, globals, new classes): List just the file
-- Class-level changes (new methods, attributes): List file + class (no function)
-- Standalone function: List file + function (no class)
-- Method in a class: List file + class + function
+- File-level changes (imports, globals, new top-level classes): Just `file`
+- Class-level changes (new methods, attributes, entire class): `file` + `class_name`
+- Standalone function (top-level function): `file` + `function_name`
+- Method in a class: `file` + `class_name` + `function_name`
 
 **Example formats:**
+
+1. File-only (imports, globals, new class):
+```json
+{"file": "path/to/file1.py"}
 ```
-# File-only (imports, globals, new class added)
-path/to/file1.py
 
-# File + Class (class-level changes)
-path/to/file2.py
-class: MyClass
+2. File + Class (class-level changes):
+```json
+{"file": "path/to/file2.py", "class_name": "MyClass"}
+```
 
-# File + Function (standalone function)
-path/to/file3.py
-function: my_function
+3. File + Function (standalone function):
+```json
+{"file": "path/to/file3.py", "function_name": "my_function"}
+```
 
-# File + Class + Function (method change)
-path/to/file4.py
-class: MyClass
-function: my_method
+4. File + Class + Function (method):
+```json
+{"file": "path/to/file4.py", "class_name": "MyClass", "function_name": "my_method"}
+```
+
+5. Multiple locations:
+```json
+[
+  {"file": "src/parser.py", "class_name": "DataParser", "function_name": "parse_json"},
+  {"file": "src/models/user.py", "class_name": "User"},
+  {"file": "src/config.py"}
+]
 ```
 
 ## SEARCH STRATEGY
@@ -89,11 +101,11 @@ function: my_method
 3. **Final Verification**: Confirm your file list
    - Verify each candidate file is truly relevant
    - Ensure you haven't missed related files
-   - Use the `finish` tool to submit your answer
+   - Use the `localization_finish` tool to submit your answer
 
 ## CRITICAL RULES
 - NEVER exceed 5 parallel bash tool calls in a single turn
-- ALWAYS use the `finish` tool when you're done (wrap your answer in backticks)
+- ALWAYS use the `localization_finish` tool when you're done
 - ALWAYS use bash tool to search (do not guess file locations)
 - NEVER read entire large files - always read in chunks (100-line ranges)
 - Check file size with `wc -l` before reading
@@ -104,24 +116,31 @@ function: my_method
 
 ## EXAMPLE SUBMISSION
 
-When ready, call the `finish` tool with your findings:
+When ready, call the `localization_finish` tool with your findings:
 
-```
-src/utils/parser.py
-class: DataParser
-function: parse_json
-
-src/models/user.py
-class: User
-
-src/config.py
-
-src/api/endpoints.py
-function: handle_request
+```json
+[
+  {
+    "file": "src/utils/parser.py",
+    "class_name": "DataParser",
+    "function_name": "parse_json"
+  },
+  {
+    "file": "src/models/user.py",
+    "class_name": "User"
+  },
+  {
+    "file": "src/config.py"
+  },
+  {
+    "file": "src/api/endpoints.py",
+    "function_name": "handle_request"
+  }
+]
 ```
 
 **Note:** In this example:
-- `parser.py` has a specific method change
-- `user.py` has a class-level change (no specific function)
-- `config.py` has file-level changes (imports/globals)
-- `endpoints.py` has a standalone function change
+- `parser.py` has a specific method change (file + class + function)
+- `user.py` has a class-level change (file + class only)
+- `config.py` has file-level changes (file only)
+- `endpoints.py` has a standalone function change (file + function only)

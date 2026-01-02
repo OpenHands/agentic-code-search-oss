@@ -9,6 +9,7 @@ from src.tools.localization_finish import (
     LocalizationFinishAction,
     LocalizationFinishExecutor,
     LocalizationFinishObservation,
+    CodeLocation,
 )
 
 
@@ -26,23 +27,25 @@ class TestLocalizationFinishExecutor:
         if os.path.exists(self.temp_dir):
             shutil.rmtree(self.temp_dir)
 
-    def test_empty_message(self):
-        """Test with empty message."""
-        action = LocalizationFinishAction(message="")
+    def test_empty_locations(self):
+        """Test with empty locations list."""
+        action = LocalizationFinishAction(locations=[])
         result = self.executor(action)
 
         assert result.success is False
         assert result.num_locations == 0
-        assert "No valid locations" in result.validation_message
+        assert "No locations provided" in result.validation_message
 
-    def test_malformed_input(self):
-        """Test with malformed input."""
-        action = LocalizationFinishAction(message="random text without proper format")
+    def test_missing_file_field(self):
+        """Test with location missing file field."""
+        # This would fail Pydantic validation, so we test with empty file string
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file="", class_name="MyClass")]
+        )
         result = self.executor(action)
 
         assert result.success is False
-        # Malformed input results in no locations found
-        assert "No valid locations" in result.validation_message
+        assert "missing a file path" in result.validation_message
 
     def test_file_only_valid(self):
         """Test valid file-level localization (no class or function)."""
@@ -50,9 +53,9 @@ class TestLocalizationFinishExecutor:
         file_path = "test_file.py"
         Path(self.temp_dir, file_path).touch()
 
-        action = LocalizationFinishAction(message=f"""```
-{file_path}
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file=file_path)]
+        )
         result = self.executor(action)
 
         assert result.success is True
@@ -64,10 +67,9 @@ class TestLocalizationFinishExecutor:
         file_path = "test_file.py"
         Path(self.temp_dir, file_path).touch()
 
-        action = LocalizationFinishAction(message=f"""```
-{file_path}
-class: MyClass
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file=file_path, class_name="MyClass")]
+        )
         result = self.executor(action)
 
         assert result.success is True
@@ -78,10 +80,9 @@ class: MyClass
         file_path = "test_file.py"
         Path(self.temp_dir, file_path).touch()
 
-        action = LocalizationFinishAction(message=f"""```
-{file_path}
-function: my_function
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file=file_path, function_name="my_function")]
+        )
         result = self.executor(action)
 
         assert result.success is True
@@ -92,11 +93,13 @@ function: my_function
         file_path = "test_file.py"
         Path(self.temp_dir, file_path).touch()
 
-        action = LocalizationFinishAction(message=f"""```
-{file_path}
-class: MyClass
-function: my_method
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(
+                file=file_path,
+                class_name="MyClass",
+                function_name="my_method"
+            )]
+        )
         result = self.executor(action)
 
         assert result.success is True
@@ -108,19 +111,14 @@ function: my_method
         for i in range(1, 5):
             Path(self.temp_dir, f"file{i}.py").touch()
 
-        action = LocalizationFinishAction(message="""```
-file1.py
-
-file2.py
-class: ClassA
-
-file3.py
-function: func_b
-
-file4.py
-class: ClassC
-function: method_d
-```""")
+        action = LocalizationFinishAction(
+            locations=[
+                CodeLocation(file="file1.py"),
+                CodeLocation(file="file2.py", class_name="ClassA"),
+                CodeLocation(file="file3.py", function_name="func_b"),
+                CodeLocation(file="file4.py", class_name="ClassC", function_name="method_d"),
+            ]
+        )
         result = self.executor(action)
 
         assert result.success is True
@@ -129,9 +127,9 @@ function: method_d
 
     def test_missing_file_warning(self):
         """Test that missing files trigger a warning."""
-        action = LocalizationFinishAction(message="""```
-nonexistent_file.py
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file="nonexistent_file.py")]
+        )
         result = self.executor(action)
 
         # Should still parse but with warning
@@ -145,34 +143,25 @@ nonexistent_file.py
         # Create only one file
         Path(self.temp_dir, "exists.py").touch()
 
-        action = LocalizationFinishAction(message="""```
-exists.py
-
-missing.py
-```""")
+        action = LocalizationFinishAction(
+            locations=[
+                CodeLocation(file="exists.py"),
+                CodeLocation(file="missing.py"),
+            ]
+        )
         result = self.executor(action)
 
         assert result.success is False
         assert result.num_locations == 2
         assert "missing.py" in result.validation_message
 
-    def test_no_backticks(self):
-        """Test that output without backticks fails parsing."""
-        action = LocalizationFinishAction(message="""file.py
-class: MyClass
-""")
-        result = self.executor(action)
-
-        # Should fail because parse_simple_output expects backticks
-        assert result.success is False
-
     def test_executor_without_workspace(self):
         """Test executor without workspace validation."""
         executor = LocalizationFinishExecutor(workspace_dir=None)
 
-        action = LocalizationFinishAction(message="""```
-any_file.py
-```""")
+        action = LocalizationFinishAction(
+            locations=[CodeLocation(file="any_file.py")]
+        )
         result = executor(action)
 
         # Should succeed without file existence check
@@ -186,43 +175,45 @@ any_file.py
         nested_dir.mkdir(parents=True)
         Path(nested_dir, "helper.py").touch()
 
-        action = LocalizationFinishAction(message="""```
-src/utils/helper.py
-function: process
-```""")
+        action = LocalizationFinishAction(
+            locations=[
+                CodeLocation(file="src/utils/helper.py", function_name="process")
+            ]
+        )
         result = self.executor(action)
 
         assert result.success is True
         assert result.num_locations == 1
 
-    def test_dotted_function_name(self):
-        """Test with ClassName.method_name format."""
+    def test_structured_class_and_function(self):
+        """Test with class and function specified separately."""
         file_path = "test.py"
         Path(self.temp_dir, file_path).touch()
 
-        action = LocalizationFinishAction(message=f"""```
-{file_path}
-function: MyClass.my_method
-```""")
+        action = LocalizationFinishAction(
+            locations=[
+                CodeLocation(
+                    file=file_path,
+                    class_name="MyClass",
+                    function_name="my_method"
+                )
+            ]
+        )
         result = self.executor(action)
 
         assert result.success is True
         assert result.num_locations == 1
-        # Should parse as class=MyClass, function=my_method
+        # Verify structured data is preserved
         assert result.details["locations"][0]["class"] == "MyClass"
         assert result.details["locations"][0]["function"] == "my_method"
 
     def test_multiple_missing_files_truncated(self):
         """Test that many missing files are truncated in message."""
-        action = LocalizationFinishAction(message="""```
-file1.py
-file2.py
-file3.py
-file4.py
-file5.py
-file6.py
-file7.py
-```""")
+        action = LocalizationFinishAction(
+            locations=[
+                CodeLocation(file=f"file{i}.py") for i in range(1, 8)
+            ]
+        )
         result = self.executor(action)
 
         assert result.success is False

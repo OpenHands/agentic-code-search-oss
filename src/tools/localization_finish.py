@@ -1,6 +1,6 @@
 """Custom finish tool for code localization tasks.
 
-This tool allows the agent to submit localization results in a flexible format where:
+This tool allows the agent to submit localization results in a structured format where:
 - File path is required
 - Class name is optional
 - Function name is optional
@@ -10,7 +10,7 @@ import os
 from typing import TYPE_CHECKING
 from collections.abc import Sequence
 
-from pydantic import Field
+from pydantic import BaseModel, Field, computed_field
 from rich.text import Text
 
 from openhands.sdk import (
@@ -26,44 +26,62 @@ if TYPE_CHECKING:
     from openhands.sdk.conversation.base import BaseConversation
 
 
+class CodeLocation(BaseModel):
+    """A single code location with optional class and function."""
+
+    file: str = Field(description="Path to the file (required)")
+    class_name: str | None = Field(default=None, description="Class name (optional)")
+    function_name: str | None = Field(default=None, description="Function/method name (optional)")
+
+
 class LocalizationFinishAction(Action):
     """Action for submitting final localization results."""
 
-    message: str = Field(
-        description="""Your final localization results in the specified format.
+    locations: list[CodeLocation] = Field(
+        description="""List of code locations to modify. Each location must have:
+- file: Path to the file (required)
+- class_name: Class name (optional, omit for file-level or standalone functions)
+- function_name: Function/method name (optional, omit for file-level or class-level only)
 
-Format:
-```
-path/to/file1.py
-class: ClassName
-function: method_name
-
-path/to/file2.py
-function: standalone_function
-
-path/to/file3.py
-```
-
-Requirements:
-- Each location must have a file path
-- Class name is optional (omit if change is file-level or function is standalone)
-- Function name is optional (omit if change is file-level or class-level only)
-- Wrap your answer in triple backticks
-
-Example for different scenarios:
-- File-level change (imports, globals): Just list the file
-- Class-level change (new method, attributes): List file + class
-- Method change: List file + class + function
-- Standalone function: List file + function
+Examples:
+- File-level change: {"file": "src/config.py"}
+- Class-level change: {"file": "src/user.py", "class_name": "User"}
+- Standalone function: {"file": "src/utils.py", "function_name": "helper"}
+- Method in class: {"file": "src/parser.py", "class_name": "Parser", "function_name": "parse"}
 """
     )
+
+    @computed_field
+    @property
+    def message(self) -> str:
+        """Auto-generate message from locations for backward compatibility."""
+        if not self.locations:
+            return ""
+
+        lines = []
+        for loc in self.locations:
+            lines.append(loc.file)
+            if loc.class_name:
+                lines.append(f"class: {loc.class_name}")
+            if loc.function_name:
+                lines.append(f"function: {loc.function_name}")
+            lines.append("")  # Empty line between locations
+
+        return "```\n" + "\n".join(lines).rstrip() + "\n```"
 
     @property
     def visualize(self) -> Text:
         """Return Rich Text representation of this action."""
         content = Text()
         content.append("Submitting localization results:\n", style="bold blue")
-        content.append(self.message)
+        content.append(f"Found {len(self.locations)} location(s):\n", style="green")
+        for i, loc in enumerate(self.locations, 1):
+            content.append(f"  {i}. {loc.file}", style="cyan")
+            if loc.class_name:
+                content.append(f" → {loc.class_name}", style="yellow")
+            if loc.function_name:
+                content.append(f".{loc.function_name}", style="magenta")
+            content.append("\n")
         return content
 
 
@@ -87,91 +105,23 @@ class LocalizationFinishObservation(Observation):
         return content
 
 
-def parse_localization_output(raw_output: str) -> list[dict]:
-    """Parse localization output with optional class and function.
-
-    This is an enhanced version of parse_simple_output that handles:
-    - File-only entries (no class or function)
-    - File + class entries (no function)
-    - File + function entries (no class)
-    - File + class + function entries
+def locations_to_dict_list(locations: list[CodeLocation]) -> list[dict]:
+    """Convert CodeLocation objects to dictionary format.
 
     Args:
-        raw_output: Raw text output to parse
+        locations: List of CodeLocation objects
 
     Returns:
-        List of dictionaries with 'file', 'class' (optional), 'function' (optional)
+        List of dictionaries with 'file', 'class', 'function' keys
     """
-    # Remove triple backticks and whitespace
-    raw_output = raw_output.strip("` \n")
-
-    locations = []
-    current_file = None
-    current_class = None
-    current_function = None
-
-    lines = raw_output.strip().split("\n")
-
-    for line in lines:
-        line = line.strip()
-
-        if not line:
-            # Empty line - save current location if we have a file
-            if current_file:
-                locations.append({
-                    "file": current_file,
-                    "class": current_class,
-                    "function": current_function,
-                })
-                current_file = None
-                current_class = None
-                current_function = None
-            continue
-
-        # Check if this is a file path (ends with .py)
-        if line.endswith(".py"):
-            # Save previous location if exists
-            if current_file:
-                locations.append({
-                    "file": current_file,
-                    "class": current_class,
-                    "function": current_function,
-                })
-            # Start new location
-            current_file = line
-            current_class = None
-            current_function = None
-            continue
-
-        # Parse class declaration
-        if line.startswith("class:"):
-            class_name = line[len("class:"):].strip()
-            current_class = class_name
-            continue
-
-        # Parse function/method declaration
-        if line.startswith("function:") or line.startswith("method:"):
-            func_text = line.split(":", 1)[1].strip()
-            func_name = func_text.split()[0].strip("() ")
-
-            # Check if function includes class prefix (e.g., "MyClass.my_method")
-            if "." in func_name:
-                parts = func_name.split(".", 1)
-                current_class = parts[0]
-                current_function = parts[1]
-            else:
-                current_function = func_name
-            continue
-
-    # Don't forget the last location
-    if current_file:
-        locations.append({
-            "file": current_file,
-            "class": current_class,
-            "function": current_function,
-        })
-
-    return locations
+    return [
+        {
+            "file": loc.file,
+            "class": loc.class_name,
+            "function": loc.function_name,
+        }
+        for loc in locations
+    ]
 
 
 class LocalizationFinishExecutor(ToolExecutor):
@@ -201,41 +151,40 @@ class LocalizationFinishExecutor(ToolExecutor):
         """
 
         try:
-            # Parse the output to validate format
-            locations = parse_localization_output(action.message)
+            # Get locations from action (already structured)
+            locations = action.locations
             num_locs = len(locations)
 
-            # Validation 1: Check if any locations were found
+            # Validation 1: Check if any locations were provided
             if num_locs == 0:
                 return LocalizationFinishObservation(
                     success=False,
                     num_locations=0,
                     validation_message=(
-                        "No valid locations found. Please provide at least one file path "
-                        "in the correct format wrapped in triple backticks."
+                        "No locations provided. Please provide at least one location."
                     ),
                     details={"error": "empty_output"}
                 )
 
             # Validation 2: Check each location has a file path
             errors = []
-            for i, loc in enumerate(locations):
-                if not loc.get('file'):
-                    errors.append(f"Location {i+1} is missing a file path")
+            for i, loc in enumerate(locations, 1):
+                if not loc.file:
+                    errors.append(f"Location {i} is missing a file path")
 
             if errors:
                 return LocalizationFinishObservation(
                     success=False,
                     num_locations=0,
                     validation_message="\n".join(errors),
-                    details={"error": "missing_file_paths", "locations": locations}
+                    details={"error": "missing_file_paths", "locations": locations_to_dict_list(locations)}
                 )
 
             # Validation 3: Check file existence (if workspace provided)
             if self.workspace_dir:
                 missing_files = []
                 for loc in locations:
-                    file_path = loc['file']
+                    file_path = loc.file
                     full_path = os.path.join(self.workspace_dir, file_path)
                     if not os.path.exists(full_path):
                         missing_files.append(file_path)
@@ -252,7 +201,7 @@ class LocalizationFinishExecutor(ToolExecutor):
                         details={
                             "warning": "files_not_found",
                             "missing_files": missing_files,
-                            "locations": locations
+                            "locations": locations_to_dict_list(locations)
                         }
                     )
 
@@ -261,24 +210,19 @@ class LocalizationFinishExecutor(ToolExecutor):
                 success=True,
                 num_locations=num_locs,
                 validation_message=f"Successfully submitted {num_locs} location(s).",
-                details={"locations": locations}
+                details={"locations": locations_to_dict_list(locations)}
             )
 
         except Exception as e:
-            # Parsing failed
+            # Validation failed
             return LocalizationFinishObservation(
                 success=False,
                 num_locations=0,
                 validation_message=(
-                    f"Error parsing output: {str(e)}\n\n"
-                    "Please ensure your output follows the correct format:\n"
-                    "```\n"
-                    "path/to/file.py\n"
-                    "class: ClassName\n"
-                    "function: method_name\n"
-                    "```"
+                    f"Error validating locations: {str(e)}\n\n"
+                    "Please ensure each location has a valid file path."
                 ),
-                details={"error": "parse_error", "exception": str(e)}
+                details={"error": "validation_error", "exception": str(e)}
             )
 
 
@@ -287,31 +231,26 @@ TOOL_DESCRIPTION = """Submit your final code localization results.
 Use this tool when you have identified all relevant files, classes, and functions
 that need to be modified to address the issue described in the problem statement.
 
-Format your results as follows:
-```
-path/to/file1.py
-class: ClassName
-function: method_name
+Provide a structured list of locations. Each location must have:
+- file: Path to the file (required)
+- class_name: Class name (optional)
+- function_name: Function/method name (optional)
 
-path/to/file2.py
-function: standalone_function
+Examples of different scenarios:
 
-path/to/file3.py
-```
+1. File-level change (imports, globals, new top-level classes):
+   {"file": "src/config.py"}
 
-Requirements:
-- Wrap your output in triple backticks (```)
-- Each location must start with a file path
-- Class name is OPTIONAL - include only if the change is within a specific class
-- Function name is OPTIONAL - include only if the change is at function/method level
+2. Class-level change (new methods, class attributes, entire class modified):
+   {"file": "src/models/user.py", "class_name": "User"}
 
-When to omit class/function:
-- File-level only (imports, globals, new classes): List just the file
-- Class-level only (new methods, attributes): List file + class (no function)
-- Standalone function: List file + function (no class)
-- Method in class: List file + class + function
+3. Standalone function (top-level function, not in a class):
+   {"file": "src/utils/helpers.py", "function_name": "format_date"}
 
-The tool will validate your submission and provide feedback if the format is incorrect.
+4. Method in a class (specific method modification):
+   {"file": "src/parser.py", "class_name": "DataParser", "function_name": "parse_json"}
+
+The tool will validate file existence and provide feedback if issues are found.
 """
 
 
@@ -351,11 +290,11 @@ class LocalizationFinishTool(ToolDefinition[LocalizationFinishAction, Localizati
         ]
 
 
-@tool(name="finish")
+@tool(name="localization_finish")
 def _make_localization_finish_tool(conv_state) -> list[ToolDefinition]:
     """Create localization finish tool.
 
-    This replaces the default finish tool with a localization-specific version
-    that validates the output format.
+    This is a localization-specific finish tool that accepts structured locations
+    and validates the output format.
     """
     return LocalizationFinishTool.create(conv_state)
