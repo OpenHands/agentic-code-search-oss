@@ -1,17 +1,17 @@
 import logging
-from typing import Dict, List, Tuple
+from typing import Dict, List, Tuple, Union
 
-def parse_simple_output(raw_output: str) -> List[Dict[str, str]]:
+def parse_simple_output(raw_output: Union[str, List[Dict[str, str]]]) -> List[Dict[str, str]]:
     """
     Parse simplified agent output containing filename, optional class, and function.
 
     Args:
-        raw_output: Raw text output from the agent
+        raw_output: Either a raw text string OR a list of location dicts (for structured input)
 
     Returns:
         List of dictionaries with keys: 'file', 'class' (optional), 'function'
 
-    Example input format:
+    Example string input format:
         ```
         path/to/file1.py
         class: MyClass
@@ -21,12 +21,32 @@ def parse_simple_output(raw_output: str) -> List[Dict[str, str]]:
         function: standalone_function
         ```
 
-    Example output:
+    Example structured input format:
+        [
+            {'file': 'path/to/file1.py', 'class': 'MyClass', 'function': 'my_method'},
+            {'file': 'path/to/file2.py', 'class': None, 'function': 'standalone_function'}
+        ]
+
+    Example output (same for both):
         [
             {'file': 'path/to/file1.py', 'class': 'MyClass', 'function': 'my_method'},
             {'file': 'path/to/file2.py', 'class': None, 'function': 'standalone_function'}
         ]
     """
+    # Handle structured input (list of dicts)
+    if isinstance(raw_output, list):
+        # Already in the correct format (or close to it)
+        # Normalize field names: class_name -> class, function_name -> function
+        normalized = []
+        for loc in raw_output:
+            normalized.append({
+                'file': loc.get('file', ''),
+                'class': loc.get('class') or loc.get('class_name'),
+                'function': loc.get('function') or loc.get('function_name'),
+            })
+        return normalized
+
+    # Handle string input (legacy format)
     # Remove triple backticks and whitespace
     raw_output = raw_output.strip("` \n")
 

@@ -7,6 +7,7 @@ reward:
 
 tools:
   - terminal
+  - localization_finish
 
 prompts:
   system_prompt: "templates/system_prompt.j2"

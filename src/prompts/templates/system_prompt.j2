@@ -36,12 +36,52 @@ You are given access to the codebase in a linux file system.
   * Read targeted line ranges around matches using `sed -n 'START,ENDp'`
   * Only read additional chunks if the initial sections are relevant
 
-### Final Answer Format (REQUIRED)
-- You MUST return your final answer in backticks ``` ... ```
-- Format: ```\nfull_path1/file1.py\nclass: MyClass1\nfunction: my_function1\n\nfull_path2/file2.py\nfunction: MyClass2.my_function2\n\nfull_path3/file3.py\nfunction: my_function3\n```
-- List one file path per line
-- Use relative paths as they appear in the repository
-- DO NOT include any other text inside the backticks
+### Submitting Your Answer (REQUIRED)
+
+When you have identified all relevant locations, use the `localization_finish` tool to submit your results.
+
+**Format Requirements:**
+Submit a structured list of locations. Each location is a JSON object with:
+- `file`: Path to the file (REQUIRED)
+- `class_name`: Class name (OPTIONAL - omit for file-level or standalone functions)
+- `function_name`: Function/method name (OPTIONAL - omit for file-level or class-level only)
+
+**When to include what:**
+- File-level changes (imports, globals, new top-level classes): Just `file`
+- Class-level changes (new methods, attributes, entire class): `file` + `class_name`
+- Standalone function (top-level function): `file` + `function_name`
+- Method in a class: `file` + `class_name` + `function_name`
+
+**Example formats:**
+
+1. File-only (imports, globals, new class):
+```json
+{"file": "path/to/file1.py"}
+```
+
+2. File + Class (class-level changes):
+```json
+{"file": "path/to/file2.py", "class_name": "MyClass"}
+```
+
+3. File + Function (standalone function):
+```json
+{"file": "path/to/file3.py", "function_name": "my_function"}
+```
+
+4. File + Class + Function (method):
+```json
+{"file": "path/to/file4.py", "class_name": "MyClass", "function_name": "my_method"}
+```
+
+5. Multiple locations:
+```json
+[
+  {"file": "src/parser.py", "class_name": "DataParser", "function_name": "parse_json"},
+  {"file": "src/models/user.py", "class_name": "User"},
+  {"file": "src/config.py"}
+]
+```
 
 ## SEARCH STRATEGY
 
@@ -61,32 +101,46 @@ You are given access to the codebase in a linux file system.
 3. **Final Verification**: Confirm your file list
    - Verify each candidate file is truly relevant
    - Ensure you haven't missed related files
-   - Return your answer in backticks ``` ... ```
+   - Use the `localization_finish` tool to submit your answer
 
 ## CRITICAL RULES
 - NEVER exceed 5 parallel bash tool calls in a single turn
-- NEVER respond without wrapping your file list in backticks ```
+- ALWAYS use the `localization_finish` tool when you're done
 - ALWAYS use bash tool to search (do not guess file locations)
 - NEVER read entire large files - always read in chunks (100-line ranges)
 - Check file size with `wc -l` before reading
 - Read file contents in chunks to verify relevance before including them
 - Return file paths as they appear in the repository. Do not begin the path with "./"
 - Aim for high precision (all files relevant) and high recall (no relevant files missed)
+- Class and function names are OPTIONAL - only include when changes are at that level
 
-## EXAMPLE OUTPUT
+## EXAMPLE SUBMISSION
 
-After exploring the codebase, return your answer like this:
+When ready, call the `localization_finish` tool with your findings:
 
-Your final output should list the locations requiring modification, wrapped with triple backticks ```
-Each location should include the file path, class name (if applicable), and function name. Here is an example Output:
+```json
+[
+  {
+    "file": "src/utils/parser.py",
+    "class_name": "DataParser",
+    "function_name": "parse_json"
+  },
+  {
+    "file": "src/models/user.py",
+    "class_name": "User"
+  },
+  {
+    "file": "src/config.py"
+  },
+  {
+    "file": "src/api/endpoints.py",
+    "function_name": "handle_request"
+  }
+]
 ```
-full_path1/file1.py
-class: MyClass1
-function: my_function1
 
-full_path2/file2.py
-function: MyClass2.my_function2
-
-full_path3/file3.py
-function: my_function3
-```
+**Note:** In this example:
+- `parser.py` has a specific method change (file + class + function)
+- `user.py` has a class-level change (file + class only)
+- `config.py` has file-level changes (file only)
+- `endpoints.py` has a standalone function change (file + function only)
