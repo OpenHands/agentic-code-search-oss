@@ -13,7 +13,6 @@ from skyrl_train.utils.ppo_utils import (
 )
 from skyrl_train.training_batch import TrainingInputBatch
 from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
-from src.train import CodeSearchPPOExp, AsyncCodeSearchPPOExp
 
 def apply_reward_kl_penalty(data: TrainingInputBatch) -> TrainingInputBatch:
     """Computes the KL penalty and sets the rewards to the KL penalty"""
