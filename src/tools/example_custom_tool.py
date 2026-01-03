@@ -23,7 +23,7 @@ from openhands.tools.terminal import (
 # --- Action / Observation ---
 
 
-class GrepAction(Action):
+class CustomGrepAction(Action):
     pattern: str = Field(description="Regex to search for")
     path: str = Field(
         default=".", description="Directory to search (absolute or relative)"
@@ -32,7 +32,7 @@ class GrepAction(Action):
         default=None, description="Optional glob to filter files (e.g. '*.py')"
     )
 
-class GrepObservation(Observation):
+class CustomGrepObservation(Observation):
     matches: list[str] = Field(default_factory=list)
     files: list[str] = Field(default_factory=list)
     count: int = 0
@@ -54,11 +54,11 @@ class GrepObservation(Observation):
 # --- Executor ---
 
 
-class GrepExecutor(ToolExecutor[GrepAction, GrepObservation]):
+class CustomGrepExecutor(ToolExecutor[CustomGrepAction, CustomGrepObservation]):
     def __init__(self, terminal: TerminalExecutor):
         self.terminal: TerminalExecutor = terminal
 
-    def __call__(self, action: GrepAction, conversation=None) -> GrepObservation:  # noqa: ARG002
+    def __call__(self, action: CustomGrepAction, conversation=None) -> CustomGrepObservation:  # noqa: ARG002
         root = os.path.abspath(action.path)
         pat = shlex.quote(action.pattern)
         root_q = shlex.quote(root)
@@ -86,7 +86,7 @@ class GrepExecutor(ToolExecutor[GrepAction, GrepObservation]):
                 if file_path:
                     files.add(os.path.abspath(file_path))
 
-        return GrepObservation(matches=matches, files=sorted(files), count=len(matches))
+        return CustomGrepObservation(matches=matches, files=sorted(files), count=len(matches))
 
 # Tool description
 _GREP_DESCRIPTION = """Fast content search tool.
@@ -101,14 +101,14 @@ _GREP_DESCRIPTION = """Fast content search tool.
 
 # --- Tool Definition ---
 
-class GrepTool(ToolDefinition[GrepAction, GrepObservation]):
+class CustomGrepTool(ToolDefinition[CustomGrepAction, CustomGrepObservation]):
     """A custom grep tool that searches file contents using regular expressions."""
 
     @classmethod
     def create(
         cls, conv_state, terminal_executor: TerminalExecutor | None = None
     ) -> Sequence[ToolDefinition]:
-        """Create GrepTool instance with a GrepExecutor.
+        """Create CustomGrepTool instance with a CustomGrepExecutor.
 
         Args:
             conv_state: Conversation state to get working directory from.
@@ -116,19 +116,19 @@ class GrepTool(ToolDefinition[GrepAction, GrepObservation]):
                          a new one will be created.
 
         Returns:
-            A sequence containing a single GrepTool instance.
+            A sequence containing a single CustomGrepTool instance.
         """
         if terminal_executor is None:
             terminal_executor = TerminalExecutor(
                 working_dir=conv_state.workspace.working_dir
             )
-        grep_executor = GrepExecutor(terminal_executor)
+        grep_executor = CustomGrepExecutor(terminal_executor)
 
         return [
             cls(
                 description=_GREP_DESCRIPTION,
-                action_type=GrepAction,
-                observation_type=GrepObservation,
+                action_type=CustomGrepAction,
+                observation_type=CustomGrepObservation,
                 executor=grep_executor,
             )
         ]
@@ -141,7 +141,7 @@ def _make_bash_and_grep_tools(conv_state) -> list[ToolDefinition]:
     # terminal_tool = terminal_tool.set_executor(executor=terminal_executor)
     terminal_tool = TerminalTool.create(conv_state, executor=terminal_executor)[0]
 
-    # Use the GrepTool.create() method with shared terminal_executor
-    grep_tool = GrepTool.create(conv_state, terminal_executor=terminal_executor)[0]
+    # Use the CustomGrepTool.create() method with shared terminal_executor
+    grep_tool = CustomGrepTool.create(conv_state, terminal_executor=terminal_executor)[0]
 
     return [terminal_tool, grep_tool]
