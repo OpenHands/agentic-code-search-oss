@@ -9,6 +9,7 @@ import asyncio
 # from src.tools import tool_exists
 from src.generator.code_search_generator import CodeSearchGenerator
 from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
+from src.distiller import FullyAsyncOnPolicyDistillationTrainer
 # from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
 
 
@@ -53,15 +54,34 @@ class AsyncCodeSearchPPOExp(CodeSearchPPOExp):
         asyncio.run(trainer.train())
 
 
+class CodeSearchOnPolicyDistillationExp(CodeSearchPPOExp):
+    def get_trainer(self, *args, **kwargs):
+        return FullyAsyncOnPolicyDistillationTrainer(*args, **kwargs)
+
+class AsyncCodeSearchOnPolicyDistillationExp(AsyncCodeSearchPPOExp):
+    def get_trainer(self, *args, **kwargs):
+        return FullyAsyncOnPolicyDistillationTrainer(*args, **kwargs)
+
 @ray.remote(num_cpus=1)
 def skyrl_entrypoint(cfg: DictConfig):
     # make sure that the training loop is not run on the head node.
-    if cfg.get("run_async_trainer", False):
-        print("Running async trainer")
-        exp = AsyncCodeSearchPPOExp(cfg)
-    else:
-        print("Running sync trainer")
-        exp = CodeSearchPPOExp(cfg)
+    run_async = cfg.get("run_async_trainer", False)
+    use_distillation = cfg.get("use_distillation", False)
+    
+    match (run_async, use_distillation):
+        case (True, True):
+            print("Running async distillation trainer")
+            exp = AsyncCodeSearchOnPolicyDistillationExp(cfg)
+        case (True, False):
+            print("Running async trainer")
+            exp = AsyncCodeSearchPPOExp(cfg)
+        case (False, True):
+            print("Running sync distillation trainer")
+            exp = CodeSearchOnPolicyDistillationExp(cfg)
+        case (False, False):
+            print("Running sync trainer")
+            exp = CodeSearchPPOExp(cfg)
+    
     exp.run()
 
 
