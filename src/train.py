@@ -9,7 +9,7 @@ import asyncio
 # from src.tools import tool_exists
 from src.generator.code_search_generator import CodeSearchGenerator
 from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
-from src.distiller import FullyAsyncOnPolicyDistillationTrainer
+from src.distiller import FullyAsyncOnPolicyDistillationTrainer, OnPolicyDistillationTrainer
 # from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
 
 
@@ -56,7 +56,7 @@ class AsyncCodeSearchPPOExp(CodeSearchPPOExp):
 
 class CodeSearchOnPolicyDistillationExp(CodeSearchPPOExp):
     def get_trainer(self, *args, **kwargs):
-        return FullyAsyncOnPolicyDistillationTrainer(*args, **kwargs)
+        return OnPolicyDistillationTrainer(*args, **kwargs)
 
 class AsyncCodeSearchOnPolicyDistillationExp(AsyncCodeSearchPPOExp):
     def get_trainer(self, *args, **kwargs):

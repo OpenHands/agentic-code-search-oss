@@ -375,10 +375,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
                 buffer_succeed = 5  # buffer tokens after assistant tag
                 buffer_precede = 1  # buffer tokens before im_start tag
-                # make mask of 0 for everything inside <|im_start|> 
-                # and assistant and 1 elsewhere 
+                # make mask of 0 for everything inside <|im_start|>
+                # and assistant and 1 elsewhere
                 start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
                 end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
+                end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
                 mask = []
                 found_role_switch = False
                 inside = False
@@ -406,12 +407,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         found_role_switch = True
                     else:
                         found_role_switch = False
-
-                # mask zero out everything beyond max_response_len
-                # Don't truncate the response, just mask out the loss
-                if len(current_response_ids) > max_response_len:
-                    for i in range(max_response_len, len(current_response_ids)):
-                        mask[i] = 0
 
                 rollout_list.append(
                     (
@@ -550,7 +545,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             for step_id in range(len(step_outputs)):
                 out_trajectory_id = copy.deepcopy(trajectory_ids[i])
                 out_trajectory_id.step = step_id
-                out_trajectory_ids.append(out_trajectory_id.instance_id)
+                out_trajectory_ids.append(out_trajectory_id)
                 is_last_step.append(step_id == len(step_outputs) - 1)
 
         if not len(responses):
