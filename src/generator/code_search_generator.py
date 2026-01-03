@@ -380,6 +380,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
                 end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
                 mask = []
+                found_role_switch = False
                 inside = False
                 buffer = 0
                 for token_id in current_response_ids:
@@ -389,7 +390,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                             mask.pop()
                         mask.extend([0] * buffer_precede)
                         mask.append(0)
-                    elif token_id == end_token_id:
+                    elif token_id == end_token_id and found_role_switch: # mark as start of assistant response only if the immediately previous token is <im_start>, else it is present in between somewhere
                         inside = False
                         mask.append(0)
                         buffer = buffer_succeed
@@ -401,6 +402,10 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                             buffer -= 1
                         else:
                             mask.append(1)
+                    if token_id == start_token_id:
+                        found_role_switch = True
+                    else:
+                        found_role_switch = False
 
                 # mask zero out everything beyond max_response_len
                 # Don't truncate the response, just mask out the loss
