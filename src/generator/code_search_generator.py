@@ -143,12 +143,11 @@ def init_and_run(
             temperature=temperature,
             litellm_extra_body={
                 "return_token_ids": True,
-                "include_stop_str_in_output": True,
+                "include_stop_str_in_output": False,
                 "chat_template_kwargs": {
-                    "add_generation_prompt": True,
-                    # "enable_thinking": True
-                }
-            }
+                    "enable_thinking": False,
+                    }
+            },
         ),
         tools=tools,
         # security_analyzer=None,
@@ -495,7 +494,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             # get everything between ```` with regex
             raw_final_message = final_message
             matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
-            parsed_final_message = matches[0] if matches else final_message
+            parsed_final_message = matches[-1] if matches else final_message
 
             result_dict = {
                 "instance_id": instance_id,
