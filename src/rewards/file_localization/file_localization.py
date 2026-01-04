@@ -26,9 +26,15 @@ def file_localization_f1_reward(
     final_message: str,
     instance: dict,
     file_level_weight: float=1.0,
+    structured_locations=None,
     **kwargs
     ):
-    all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(final_message)
+    # Use structured locations if available, otherwise parse final_message
+    if structured_locations is not None:
+        all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(structured_locations)
+    else:
+        all_found_files, all_found_modules, all_found_entities = get_simple_results_from_raw_outputs(final_message)
+
     true_files = set(x[0] for x in ast.literal_eval(instance["target"]))
     file_level_score = compute_file_f1_score(all_found_files, true_files)
     weighted_file_score = file_level_weight * file_level_score
@@ -42,6 +48,7 @@ def multilevel_localization_f1_reward(
     file_level_weight: float=1.0,
     module_level_weight: float=1.0,
     entity_level_weight: float=1.0,
+    structured_locations=None,
     **kwargs
     ):
 
@@ -67,7 +74,11 @@ def multilevel_localization_f1_reward(
     gt_modules = set(gt_modules)
     gt_entities = set(gt_entities)
 
-    predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
+    # Use structured locations if available, otherwise parse final_message
+    if structured_locations is not None:
+        predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(structured_locations)
+    else:
+        predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
 
     file_f1_score = compute_file_f1_score(predicted_files, gt_files)
     module_f1_score = compute_file_f1_score(predicted_modules, gt_modules)

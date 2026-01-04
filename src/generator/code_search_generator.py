@@ -54,6 +54,8 @@ from openhands.sdk import (
     LLMConvertibleEvent,
     get_logger,
 )
+from openhands.sdk.event import ActionEvent
+from src.tools.localization_finish import LocalizationFinishAction
 
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
@@ -73,6 +75,35 @@ logger = get_logger(__name__)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
+
+
+def get_structured_locations(events: List[Event]) -> Optional[List[Dict[str, Any]]]:
+    """Extract structured locations from LocalizationFinishAction in events.
+
+    Args:
+        events: List of conversation events to search through.
+
+    Returns:
+        List of location dicts with 'file', 'class', 'function' keys, or None if not found.
+    """
+    # Find the last LocalizationFinishAction
+    for event in reversed(events):
+        if (
+            isinstance(event, ActionEvent)
+            and event.source == "agent"
+            and isinstance(event.action, LocalizationFinishAction)
+        ):
+            # Extract structured locations from the action
+            locations = []
+            for loc in event.action.locations:
+                locations.append({
+                    "file": loc.file,
+                    "class": loc.class_name,
+                    "function": loc.function_name,
+                })
+            return locations
+    return None
+
 
 @ray.remote(num_cpus=0.01)
 def init_and_run(
@@ -156,6 +187,9 @@ def init_and_run(
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
     final_message = get_agent_final_response(conversation.state.events)
 
+    # Extract structured locations if available
+    structured_locations = get_structured_locations(conversation.state.events)
+
     # remove the workspace dir
     try:
         if workspace.exists():
@@ -179,7 +213,7 @@ def init_and_run(
         "end_timestamp": end_timestamp
     }
 
-    return messages, final_message, additional_attr
+    return messages, final_message, structured_locations, additional_attr
 
 
 class CodeSearchGenerator(SkyRLGymGenerator):
@@ -230,7 +264,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         instance = env_extras
         error = None
         try:
-            messages, final_message, additional_attr = await init_and_run.remote(
+            messages, final_message, structured_locations, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
                 # sweagent_config,
@@ -249,6 +283,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
+            structured_locations = None
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
@@ -269,6 +304,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             try:
                 input_args = {
                     "final_message": final_message,
+                    "structured_locations": structured_locations,
                     "messages": messages,
                     "instance": instance,
                 }
@@ -276,7 +312,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 reward_fn = get_reward_function(reward_fn_args["fn"])
 
                 input_args = {
-                    **input_args, 
+                    **input_args,
                     **reward_fn_args.get("args", {})
                     }
 
