@@ -6,11 +6,13 @@ from src.rewards import reward
 
 def compute_file_f1_score(predicted_files, true_files):
     pred, true = set(predicted_files), set(true_files)
+    if not true:
+        return 0.0
     tp = len(pred & true)
     precision = tp / len(pred) if pred else 0.0
     recall = tp / len(true) if true else 0.0
-    if not pred and not true:
-        return 1.0
+    # if not pred and not true:
+    #     return 1.0
     return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
 # def file_localization_f1_reward(final_message, instance):
@@ -32,6 +34,7 @@ def file_localization_f1_reward(
     file_level_score = compute_file_f1_score(all_found_files, true_files)
     weighted_file_score = file_level_weight * file_level_score
 
+    return weighted_file_score, {"file_reward": file_level_score}
     return weighted_file_score, {"file_reward": file_level_score}
 
 @reward("multilevel_localization_f1_reward")
