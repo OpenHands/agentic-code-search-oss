@@ -8,7 +8,6 @@ from tqdm import tqdm
 
 def clone_instance(
     repo_name: str, commit_id: str, instance_id: str, output_dir: Path, patch: str | None = None
-    repo_name: str, commit_id: str, instance_id: str, output_dir: Path, patch: str | None = None
 ) -> bool:
     """
     Clone a repository at a specific commit into a separate directory.

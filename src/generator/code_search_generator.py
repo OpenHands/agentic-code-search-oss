@@ -45,8 +45,6 @@ from openhands.tools.preset.default import get_default_tools
 from openhands.tools.preset.planning import get_planning_tools
 from openhands.tools.glob import GlobTool
 from openhands.tools.grep import GrepTool
-from openhands.tools.glob import GlobTool
-from openhands.tools.grep import GrepTool
 from openhands.tools.terminal import TerminalTool
 from openhands.sdk.tool import Tool, register_tool
 from openhands.sdk import (
@@ -64,7 +62,6 @@ from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
-# from src.tools import TOOL_REGISTRY
 # from src.tools import TOOL_REGISTRY
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
@@ -122,15 +119,6 @@ def init_and_run(
     # tools = [
     #     Tool(name=tool_name) for tool_name in generator_cfg.tools
     # ]
-    # for tool_name in generator_cfg.tools:
-    #     if tool_name in TOOL_REGISTRY:
-    #         register_tool(tool_name, TOOL_REGISTRY[tool_name])
-    #     else:
-    #         raise ValueError(f"Tool {tool_name} does not exist in the registry")
-
-    # tools = [
-    #     Tool(name=tool_name) for tool_name in generator_cfg.tools
-    # ]
 
     tools = [
         # Tool(name=GlobTool.name),
@@ -169,7 +157,6 @@ def init_and_run(
 
     conversation = Conversation(
         agent=agent,
-        max_iteration_per_run=generator_cfg.max_turns,
         max_iteration_per_run=generator_cfg.max_turns,
         visualizer=None,
         workspace=str(working_dir),
@@ -226,7 +213,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         inference_engine_client: InferenceEngineClient,
         tokenizer,
         model_name: str,
-        step_wise: bool = False,
         step_wise: bool = False,
     ):
         # Call parent constructor first
@@ -353,7 +339,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             **trajectory_metrics
         }
 
-        print(f"Total reward: {reward}\nReward details: {reward_dict}\nTrajectory metrics: {metrics_dict}")
         print(f"Total reward: {reward}\nReward details: {reward_dict}\nTrajectory metrics: {metrics_dict}")
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
