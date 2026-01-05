@@ -54,7 +54,9 @@ from openhands.sdk import (
     LLMConvertibleEvent,
     get_logger,
 )
+from openhands.sdk.event import ActionEvent
 
+from src.tools.localization_finish import LocalizationFinishAction
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent

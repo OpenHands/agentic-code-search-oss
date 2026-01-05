@@ -9,6 +9,7 @@ tools:
   - glob
   - grep
   - terminal
+  - LocalizationFinishTool
 
 prompts:
   system_prompt: "templates/system_prompt.j2"

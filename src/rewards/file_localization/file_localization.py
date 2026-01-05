@@ -1,6 +1,6 @@
 import ast
 
-from .module_rewards import get_simple_results_from_raw_outputs
+from .module_rewards import get_simple_results_from_raw_outputs, parse_structured_outputs
 
 from src.rewards import reward
 
@@ -39,6 +39,7 @@ def file_localization_f1_reward(
 def multilevel_localization_f1_reward(
     final_message: str,
     instance: dict,
+    structured_locations: list[dict] | None = None,
     file_level_weight: float=1.0,
     module_level_weight: float=1.0,
     entity_level_weight: float=1.0,
@@ -67,7 +68,10 @@ def multilevel_localization_f1_reward(
     gt_modules = set(gt_modules)
     gt_entities = set(gt_entities)
 
-    predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
+    if structured_locations is not None:
+        predicted_files, predicted_modules, predicted_entities = parse_structured_outputs(structured_locations)
+    else:
+        predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
 
     file_f1_score = compute_file_f1_score(predicted_files, gt_files)
     module_f1_score = compute_file_f1_score(predicted_modules, gt_modules)
