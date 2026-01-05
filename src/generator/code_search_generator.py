@@ -175,6 +175,15 @@ def init_and_run(
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
     final_message = get_agent_final_response(conversation.state.events)
 
+    # remove the workspace dir
+    try:
+        if workspace.exists():
+            os.system(f"rm -rf {str(workspace)}")
+            logger.info(f"Removed workspace {str(workspace)}")
+    except Exception as e:
+        logger.error(f"Error removing workspace {str(workspace)}: {e}", exc_info=True)
+
+
     conversation.close()
     logger.info("Conversation Finished")
 
@@ -358,31 +367,44 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 current_response_ids = current_response_ids[len(current_prompt_ids):]
 
                 max_response_len = max_train_len - len(current_prompt_ids)
-
+                mask = [1]*len(token_messages[0]["response_token_ids"])
+                for i in range(1, len(token_messages)):
+                    mask += [0] * (len(token_messages[i]["prompt_token_ids"]) - len(token_messages[i-1]["prompt_token_ids"]) - len(token_messages[i-1]["response_token_ids"]))
+                    mask += [1] * len(token_messages[i]["response_token_ids"])
                 # make mask of 0 for everything inside <|im_start|> 
                 # and assistant and 1 elsewhere 
                 start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
                 end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
+                end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
                 mask = []
+                found_role_switch = False
                 inside = False
-                for token_id in current_response_ids:
-                    if token_id == start_token_id:
-                        inside = True
-                        mask.append(0)
-                    elif token_id == end_token_id:
-                        inside = False
-                        mask.append(0)
+                idx = 0
+                while idx < len(current_response_ids):
+                    token_id = current_response_ids[idx]
+                    if not inside:
+                        mask.append(1)
+                        idx += 1
+                        if token_id == end_of_turn_token_id:
+                            inside = True
                     else:
-                        if inside:
+                        if token_id == start_token_id:
+                            inside = True
                             mask.append(0)
+                            idx += 1
+                        elif token_id == end_token_id and found_role_switch:
+                            inside = False
+                            mask.append(0)
+                            mask.append(0)
+                            idx += 2
                         else:
-                            mask.append(1)
+                            mask.append(0)
+                            idx += 1
 
-                # mask zero out everything beyond max_response_len
-                # Don't truncate the response, just mask out the loss
-                if len(current_response_ids) > max_response_len:
-                    for i in range(max_response_len, len(current_response_ids)):
-                        mask[i] = 0
+                        if token_id == start_token_id:
+                            found_role_switch = True
+                        else:
+                            found_role_switch = False
 
                 rollout_list.append(
                     (
@@ -513,7 +535,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             for step_id in range(len(step_outputs)):
                 out_trajectory_id = copy.deepcopy(trajectory_ids[i])
                 out_trajectory_id.step = step_id
-                out_trajectory_ids.append(out_trajectory_id.instance_id)
+                out_trajectory_ids.append(out_trajectory_id)
                 is_last_step.append(step_id == len(step_outputs) - 1)
 
         if not len(responses):
