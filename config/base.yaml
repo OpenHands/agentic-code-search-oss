@@ -2,8 +2,6 @@ defaults:
   - ppo_base_config
   - training: sync
   - platform: local
-  # - agent: terminal
-  # - prompt: file_module_parallel_tools
   - _self_
 
 hydra:
@@ -45,6 +43,17 @@ trainer:
     model:
       path: ${model}
 
+  eval_before_train: false
+  epochs: 20
+  eval_batch_size: 4
+  eval_interval: 100
+  update_epochs_per_batch: 1
+  dump_data_batch: true
+  export_path: ${ckpt_path}/exported_model/
+  hf_save_interval: 5
+  ckpt_interval: 5
+  max_prompt_length: 4096
+
 generator:
   backend: vllm
   run_engines_locally: true
@@ -68,22 +77,9 @@ generator:
   sampling_params:
     temperature: 1.0
 
-  epochs: 20
-  eval_batch_size: 100
-  eval_before_train: false
-  eval_interval: 100
-  update_epochs_per_batch: 1
-
-  max_prompt_length: 4096
   max_input_length: 24000
   max_num_batched_tokens: 48000
   max_turns: 20
-
-  dump_data_batch: true
-
-  export_path: ${ckpt_path}/exported_model/
-  hf_save_interval: 5
-  ckpt_interval: 5
 
   prompts:
     system_prompt: "templates/system_prompt.j2"
@@ -93,4 +89,3 @@ generator:
     - fn: turn_efficiency
   tools:
     - terminal
-

@@ -22,9 +22,3 @@ generator:
   batched: true
   n_samples_per_prompt: 4
   gpu_memory_utilization: 0.6
-
-  
-
-
-
-

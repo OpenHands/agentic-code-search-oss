@@ -2,9 +2,18 @@
 platform:
   gpus_per_node: 1
 
+trainer:
+  train_batch_size: 4
+
 generator:
   sampling_params:
       max_generate_length: 2048
+  max_input_length: 4096
+  max_num_batched_tokens: 16384
+  max_turns: 2
+  max_num_seqs: 16
+  n_samples_per_prompt: 2
+  gpu_memory_utilization: 0.5
 
 hydra:
   job:
