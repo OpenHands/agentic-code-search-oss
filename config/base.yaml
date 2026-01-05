@@ -2,6 +2,7 @@ defaults:
   - ppo_base_config
   - training: sync
   - platform: local
+  - experiment: none
   - override hydra/launcher: local
   - _self_
 
