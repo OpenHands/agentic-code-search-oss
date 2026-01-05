@@ -104,9 +104,9 @@ uv run python -m src.train \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
-  generator.max_input_length=24000 \
-  generator.max_num_batched_tokens=48000 \
-  generator.max_turns=20 \
+  generator.max_input_length=32768 \
+  generator.max_num_batched_tokens=131072 \
+  generator.max_turns=4 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=False \
   generator.backend=vllm \

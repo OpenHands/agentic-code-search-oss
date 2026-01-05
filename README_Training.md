@@ -31,8 +31,8 @@ bash scripts/run_async_training.sh \
 ```
 DATA_PATH=<Absolute Path to Data>
 bash scripts/run_distillation.sh \
-    -m Qwen/Qwen3-VL-4B-Instruct \  # Student model (model to be trained)
-    -r Qwen/Qwen3-VL-32B-Instruct \     # Teacher model (model to distill from)
+    -m Qwen/Qwen3-4B \  # Student model (model to be trained)
+    -r Qwen/Qwen3-8B \     # Teacher model (model to distill from)
     -d $DATA_PATH \
     2>&1 | tee distillation.log
 ```
@@ -40,8 +40,8 @@ bash scripts/run_distillation.sh \
 ```
 DATA_PATH=<Absolute Path to Data>
 bash scripts/run_distillation.sh \
-    -m Qwen/Qwen3-0.6B \  # Student model (model to be trained)
-    -r Qwen/Qwen3-4B \     # Teacher model (model to distill from)
+    -m Qwen/Qwen3-4B \  # Student model (model to be trained)
+    -r Qwen/Qwen3-8B \     # Teacher model (model to distill from)
     -o "+generator.exp_config=configs/skyrl-experiments/read-only.yaml" \
     -d $DATA_PATH \
     2>&1 | tee distillation.log
