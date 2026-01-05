@@ -1,0 +1,11 @@
+# @package _global_
+trainer:
+  policy:
+    model:
+      lora:
+        rank: 32
+        alpha: 32
+        dropout: 0
+        lora_sync_path: "/tmp/skyrl_lora_sync"
+        target_modules: "all-linear"
+        exclude_modules: null

@@ -25,6 +25,7 @@ dependencies = [
     "seaborn>=0.13.2",
     "gcsfs>=2025.3.0",
     "lmcache",
+    "hydra-submitit-launcher>=1.2.0",
 ]
 
 [build-system]

@@ -1,0 +1,16 @@
+# @package hydra.launcher
+_target_: hydra_plugins.hydra_submitit_launcher.submitit_launcher.SlurmLauncher
+
+submitit_folder: ${hydra.sweep.dir}/.submitit/%j
+
+name: cso
+partition: general
+nodes: 1
+tasks_per_node: 1
+cpus_per_task: 32
+mem_gb: 512
+timeout_min: 2880  # 2-00:00:00
+exclude: babel-q5-28,babel-o5-20
+additional_parameters:
+  gres: gpu:A100:2
+

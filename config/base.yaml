@@ -1,0 +1,93 @@
+defaults:
+  - ppo_base_config
+  - training: sync
+  - platform: local
+  - experiment: none
+  - override hydra/launcher: local
+  - _self_
+
+hydra:
+  searchpath:
+    - pkg://skyrl_train.config
+  run:
+    dir: ${oc.env:PWD}/outputs/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  sweep:
+    dir: ${oc.env:PWD}/outputs/${now:%Y-%m-%d}
+    subdir: ${now:%H-%M-%S}/${hydra.job.num}
+
+model: Qwen/Qwen3-4B
+model_alias: ${replace:${model},/,-}
+ckpt_path: ${oc.env:PWD}/ckpts/${model_alias}
+data_path: data/swe_smith
+
+data:
+  train_data:
+    - ${data_path}/train.parquet
+  val_data:
+    - ${data_path}/validation.parquet
+
+trainer:
+  project_name: code_search
+  run_name: code_search_${model_alias}
+  logger: wandb
+  ckpt_path: ${ckpt_path}
+
+  algorithm:
+    advantage_estimator: grpo
+
+  placement:
+    policy_num_nodes: 1
+    ref_num_nodes: 1
+    policy_num_gpus_per_node: ${platform.gpus_per_node}
+    ref_num_gpus_per_node: ${platform.gpus_per_node}
+
+  policy:
+    model:
+      path: ${model}
+
+  eval_before_train: false
+  epochs: 20
+  eval_batch_size: 4
+  eval_interval: 100
+  update_epochs_per_batch: 1
+  dump_data_batch: true
+  export_path: ${ckpt_path}/exported_model/
+  hf_save_interval: 5
+  ckpt_interval: 5
+  max_prompt_length: 4096
+
+generator:
+  backend: vllm
+  run_engines_locally: true
+
+  enable_http_endpoint: true
+  http_endpoint_host: "0.0.0.0"
+  http_endpoint_port: 8080
+  weight_sync_backend: nccl
+
+  async_engine: true
+  inference_engine_tensor_parallel_size: 1
+  num_inference_engines: 1
+
+  traj_dir: ${ckpt_path}/trajectories/
+
+  engine_init_kwargs:
+    enable_auto_tool_choice: true
+    tool_call_parser: hermes
+    reasoning_parser: qwen3
+
+  sampling_params:
+    temperature: 1.0
+
+  max_input_length: 24000
+  max_num_batched_tokens: 48000
+  max_turns: 20
+
+  prompts:
+    system_prompt: "templates/system_prompt.j2"
+    user_prompt: "templates/file_localization.j2"
+  reward:
+    - fn: tool_use_reward
+    - fn: turn_efficiency
+  tools:
+    - terminal

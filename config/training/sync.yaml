@@ -1,0 +1,24 @@
+# @package _global_
+run_async_trainer: false
+
+trainer:
+  placement:
+    colocate_all: true
+    colocate_policy_ref: true
+
+  strategy: fsdp2
+
+  policy_mini_batch_size: 4
+  micro_forward_batch_size_per_gpu: 2
+  micro_train_batch_size_per_gpu: 2
+  resume_mode: null
+
+  policy:
+    sequence_parallel_size: ${platform.gpus_per_node}
+  ref:
+    sequence_parallel_size: ${platform.gpus_per_node}
+
+generator:
+  batched: true
+  n_samples_per_prompt: 4
+  gpu_memory_utilization: 0.6
