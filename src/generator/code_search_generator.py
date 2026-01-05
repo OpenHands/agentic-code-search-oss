@@ -60,7 +60,7 @@ from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
-from src.tools import TOOL_REGISTRY
+from src.tools import TOOL_REGISTRY, DEFAULT_OPENHANDS_TOOLS, import_openhands_tool
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
@@ -105,10 +105,14 @@ def init_and_run(
     messages = []
 
     for tool_name in generator_cfg.tools:
-        if tool_name in TOOL_REGISTRY:
+        # Import OpenHands tools to trigger their registration
+        if tool_name in DEFAULT_OPENHANDS_TOOLS:
+            import_openhands_tool(tool_name)
+        # Register custom tools from our registry
+        elif tool_name in TOOL_REGISTRY:
             register_tool(tool_name, TOOL_REGISTRY[tool_name])
         else:
-            raise ValueError(f"Tool {tool_name} does not exist in the registry")
+            raise ValueError(f"Tool {tool_name} does not exist in the registry or default OpenHands tools")
 
     tools = [
         Tool(name=tool_name) for tool_name in generator_cfg.tools
@@ -155,6 +159,15 @@ def init_and_run(
 
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
     final_message = get_agent_final_response(conversation.state.events)
+
+    # remove the workspace dir
+    try:
+        if workspace.exists():
+            os.system(f"rm -rf {str(workspace)}")
+            logger.info(f"Removed workspace {str(workspace)}")
+    except Exception as e:
+        logger.error(f"Error removing workspace {str(workspace)}: {e}", exc_info=True)
+
 
     conversation.close()
     logger.info("Conversation Finished")
@@ -311,13 +324,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
-        gamma = 0.9
-        num_steps = len(token_messages)
         if len(token_messages) > 0:
             for idx, message in enumerate(token_messages):
                 current_prompt_ids = message["prompt_token_ids"]
                 current_response_ids = message["response_token_ids"]
-                step_reward = reward * gamma**(num_steps - idx - 1)
+                step_reward = reward
 
                 rollout_list.append(
                     (

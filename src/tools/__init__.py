@@ -19,6 +19,31 @@ DEFAULT_OPENHANDS_TOOLS = [
     "tom_consult"
 ]
 
+# Mapping of OpenHands tool names to their import paths
+OPENHANDS_TOOL_IMPORTS = {
+    "glob": "openhands.tools.glob",
+    "grep": "openhands.tools.grep",
+    "terminal": "openhands.tools.terminal",
+    "file_editor": "openhands.tools.file_editor",
+    "task_tracker": "openhands.tools.task_tracker",
+    "browser_use": "openhands.tools.browser_use",
+    "apply_patch": "openhands.tools.apply_patch",
+    "delegate": "openhands.tools.delegate",
+    "planning_file_editor": "openhands.tools.planning_file_editor",
+    "tom_consult": "openhands.tools.tom_consult",
+}
+
+
+def import_openhands_tool(tool_name: str) -> None:
+    """Import an OpenHands tool module to trigger its registration."""
+    if tool_name in OPENHANDS_TOOL_IMPORTS:
+        importlib.import_module(OPENHANDS_TOOL_IMPORTS[tool_name])
+
+
+def tool_exists(tool_name: str):
+    """Check if a tool exists in the registry."""
+    return tool_name in DEFAULT_OPENHANDS_TOOLS or tool_name in TOOL_REGISTRY
+
 def tool(name: str):
     """Decorator to register a new tool function."""
     def decorator(func):
