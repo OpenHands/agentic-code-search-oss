@@ -326,12 +326,25 @@ def check_run_exists(run_name: str) -> dict:
     image=modal.Image.debian_slim(python_version="3.12"),
     volumes={CHECKPOINTS_PATH: checkpoints_volume},
 )
-def list_runs() -> list[str]:
+def list_runs() -> None:
     """List all existing run names in the checkpoints volume."""
     ckpt_path = Path(CHECKPOINTS_PATH)
     if not ckpt_path.exists():
-        return []
-    return [d.name for d in ckpt_path.iterdir() if d.is_dir()]
+        print("No runs found (checkpoints volume is empty)")
+        return
+
+    runs = [d.name for d in ckpt_path.iterdir() if d.is_dir()]
+    if not runs:
+        print("No runs found")
+        return
+
+    print(f"Found {len(runs)} run(s):")
+    for run in sorted(runs):
+        run_path = ckpt_path / run
+        checkpoints = list(run_path.glob("global_step_*"))
+        traj_path = run_path / "trajectories"
+        has_traj = traj_path.exists() and any(traj_path.iterdir()) if traj_path.exists() else False
+        print(f"  - {run} ({len(checkpoints)} checkpoints, trajectories: {has_traj})")
 
 
 @app.function(
