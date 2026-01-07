@@ -100,15 +100,18 @@ def get_num_gpus() -> int:
 
 def build_training_command(
     model: str,
+    run_name: str,
     n_rollouts: int,
     batch_size: int,
     max_length: int,
     num_gpus: int,
+    max_steps: int,
+    fresh: bool,
     extra_args: str,
 ) -> list[str]:
     """Build the training command with all parameters."""
-    model_alias = model.replace("/", "-")
-    run_name = f"code_search_{model_alias}"
+    # Create run-specific checkpoint directory
+    run_ckpt_path = f"{CHECKPOINTS_PATH}/{run_name}"
 
     # Split GPUs between training and inference
     half_gpus = max(1, num_gpus // 2)
@@ -147,7 +150,7 @@ def build_training_command(
         "trainer.policy.sequence_parallel_size=1",
         f"generator.num_inference_engines={num_inference_engines}",
         "generator.inference_engine_tensor_parallel_size=1",
-        f"+generator.traj_dir={CHECKPOINTS_PATH}/trajectories/",
+        f"+generator.traj_dir={run_ckpt_path}/trajectories/",
         "+generator.engine_init_kwargs.enable_auto_tool_choice=true",
         "+generator.engine_init_kwargs.tool_call_parser=hermes",
         "+generator.engine_init_kwargs.reasoning_parser=qwen3",
@@ -161,7 +164,7 @@ def build_training_command(
         "trainer.micro_forward_batch_size_per_gpu=1",
         "trainer.micro_train_batch_size_per_gpu=1",
         "trainer.dump_data_batch=true",
-        f"trainer.export_path={CHECKPOINTS_PATH}/exported_model/",
+        f"trainer.export_path={run_ckpt_path}/exported_model/",
         "trainer.hf_save_interval=5",
         "trainer.ckpt_interval=5",
         "trainer.max_prompt_length=4096",
@@ -187,10 +190,15 @@ def build_training_command(
         "trainer.logger=wandb",
         "trainer.project_name=code_search",
         f"trainer.run_name={run_name}",
-        "trainer.resume_mode=latest",
-        f"trainer.ckpt_path={CHECKPOINTS_PATH}",
+        f"trainer.resume_mode={'null' if fresh else 'latest'}",
+        f"trainer.ckpt_path={run_ckpt_path}",
         "trainer.max_ckpts_to_keep=3",
     ]
+
+    # Add max_steps limit if specified (for quick testing)
+    # Use + prefix since max_steps isn't in the base config
+    if max_steps > 0:
+        cmd.append(f"+trainer.max_steps={max_steps}")
 
     # Add extra args if provided
     if extra_args:
@@ -214,9 +222,12 @@ def build_training_command(
 )
 def train(
     model: str = "Qwen/Qwen3-4B",
+    run_name: str = "",  # Experiment name (defaults to model alias)
     n_rollouts: int = 8,
     batch_size: int = 8,
     max_length: int = 8192,
+    max_steps: int = 0,  # 0 = no limit, otherwise limit training steps
+    fresh: bool = False,  # Start fresh training, ignoring previous checkpoints
     extra_args: str = "",
 ) -> None:
     """
@@ -224,11 +235,15 @@ def train(
 
     Args:
         model: HuggingFace model path (e.g., Qwen/Qwen3-4B)
+        run_name: Experiment name for organizing checkpoints (defaults to model alias)
         n_rollouts: Number of rollouts per prompt
         batch_size: Training batch size
         max_length: Maximum generation length
         extra_args: Additional Hydra config overrides
     """
+    # Generate run_name from model if not provided
+    if not run_name:
+        run_name = model.replace("/", "-")
     # Reload volume to ensure latest data is available
     data_volume.reload()
 
@@ -239,10 +254,13 @@ def train(
     # Build and run the training command
     cmd = build_training_command(
         model=model,
+        run_name=run_name,
         n_rollouts=n_rollouts,
         batch_size=batch_size,
         max_length=max_length,
         num_gpus=num_gpus,
+        max_steps=max_steps,
+        fresh=fresh,
         extra_args=extra_args,
     )
 
@@ -266,6 +284,54 @@ def train(
 
 
 # --- Helper Functions ---
+
+
+@app.function(
+    image=modal.Image.debian_slim(python_version="3.12"),
+    volumes={CHECKPOINTS_PATH: checkpoints_volume},
+)
+def check_run_exists(run_name: str) -> dict:
+    """
+    Check if a run already exists in the checkpoints volume.
+
+    Returns dict with:
+        - exists: bool
+        - has_checkpoints: bool
+        - checkpoint_count: int
+        - has_trajectories: bool
+    """
+    run_path = Path(CHECKPOINTS_PATH) / run_name
+
+    result = {
+        "exists": run_path.exists(),
+        "has_checkpoints": False,
+        "checkpoint_count": 0,
+        "has_trajectories": False,
+    }
+
+    if run_path.exists():
+        # Check for checkpoint directories (global_step_*)
+        checkpoints = list(run_path.glob("global_step_*"))
+        result["has_checkpoints"] = len(checkpoints) > 0
+        result["checkpoint_count"] = len(checkpoints)
+
+        # Check for trajectories
+        traj_path = run_path / "trajectories"
+        result["has_trajectories"] = traj_path.exists() and any(traj_path.iterdir())
+
+    return result
+
+
+@app.function(
+    image=modal.Image.debian_slim(python_version="3.12"),
+    volumes={CHECKPOINTS_PATH: checkpoints_volume},
+)
+def list_runs() -> list[str]:
+    """List all existing run names in the checkpoints volume."""
+    ckpt_path = Path(CHECKPOINTS_PATH)
+    if not ckpt_path.exists():
+        return []
+    return [d.name for d in ckpt_path.iterdir() if d.is_dir()]
 
 
 @app.function(
@@ -450,9 +516,13 @@ def validate_setup():
 @app.local_entrypoint()
 def main(
     model: str = "Qwen/Qwen3-4B",
+    run_name: str = "",
     n_rollouts: int = 8,
     batch_size: int = 8,
     max_length: int = 8192,
+    max_steps: int = 0,
+    fresh: bool = False,
+    force: bool = False,
     extra_args: str = "",
 ):
     """
@@ -460,26 +530,67 @@ def main(
 
     Args:
         model: HuggingFace model path (e.g., Qwen/Qwen3-4B)
+        run_name: Experiment name for organizing checkpoints (defaults to model alias)
         n_rollouts: Number of rollouts per prompt
         batch_size: Training batch size
         max_length: Maximum generation length
+        max_steps: Limit training to N steps (0 = no limit, use for quick tests)
+        fresh: Start fresh training, ignoring previous checkpoints
+        force: Skip confirmation prompts
         extra_args: Additional Hydra config overrides
 
     Note: GPU config (H100:4) and timeout (24h) are set in the @app.function decorator.
     To change these, edit the decorator in modal_train.py.
     """
-    print("Starting training with:")
+    # Generate run_name from model if not provided
+    if not run_name:
+        run_name = model.replace("/", "-")
+
+    print(f"\n{'=' * 60}")
+    print("Training Configuration")
+    print(f"{'=' * 60}")
+    print(f"  Run Name: {run_name}")
     print(f"  Model: {model}")
     print("  GPU: H100:4 (edit decorator to change)")
     print("  Timeout: 24 hours (Modal max)")
     print(f"  N Rollouts: {n_rollouts}")
     print(f"  Batch Size: {batch_size}")
+    print(f"  Max Steps: {max_steps if max_steps > 0 else 'unlimited'}")
+    print(f"  Fresh: {fresh}")
+    print(f"{'=' * 60}\n")
+
+    # Check if run already exists
+    print("Checking if run exists...")
+    run_info = check_run_exists.remote(run_name)
+
+    if run_info["exists"]:
+        print(f"\n⚠️  Run '{run_name}' already exists!")
+        print(f"   Checkpoints: {run_info['checkpoint_count']}")
+        print(f"   Has trajectories: {run_info['has_trajectories']}")
+
+        if fresh:
+            print("\n   --fresh is set: will start fresh training (ignoring existing checkpoints)")
+        else:
+            print("\n   Will attempt to resume from latest checkpoint")
+
+        if not force:
+            response = input("\nContinue? [y/N]: ").strip().lower()
+            if response != "y":
+                print("Aborted.")
+                return
+    else:
+        print(f"✅ New run: '{run_name}'")
+
+    print("\nStarting training...")
 
     # Run training
     train.remote(
         model=model,
+        run_name=run_name,
         n_rollouts=n_rollouts,
         batch_size=batch_size,
         max_length=max_length,
+        max_steps=max_steps,
+        fresh=fresh,
         extra_args=extra_args,
     )

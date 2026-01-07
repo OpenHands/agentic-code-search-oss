@@ -73,32 +73,90 @@ modal run scripts/modal_train.py::validate_setup
 #### Run Training
 
 ```bash
-# Basic training with 4x H100 GPUs (runs in background)
-modal run --detach scripts/modal_train.py --model Qwen/Qwen3-4B
+# Start a new experiment (will prompt for confirmation if run exists)
+modal run scripts/modal_train.py --run-name exp-v1 --fresh
 
-# With smaller batch for testing
-modal run --detach scripts/modal_train.py \
+# Resume an existing experiment
+modal run scripts/modal_train.py --run-name exp-v1
+
+# Quick test: small batch, limited steps
+modal run scripts/modal_train.py \
+    --run-name test-run \
     --model Qwen/Qwen3-0.6B \
     --batch-size 2 \
-    --n-rollouts 1
+    --max-steps 20 \
+    --fresh
+
+# Run in background (detached) with --force to skip confirmation
+modal run --detach scripts/modal_train.py \
+    --run-name exp-v1 \
+    --force
 
 # With config overrides
-modal run --detach scripts/modal_train.py \
-    --model Qwen/Qwen3-4B \
+modal run scripts/modal_train.py \
+    --run-name exp-readonly \
     --extra-args "+generator.exp_config=configs/skyrl-experiments/read-only.yaml"
 
 # View logs
 modal app logs agentic-code-search-training
+
+# List existing runs
+modal run scripts/modal_train.py::list_runs
+```
+
+#### Command Flags
+
+| Flag           | Default         | Description                                        |
+| -------------- | --------------- | -------------------------------------------------- |
+| `--run-name`   | (from model)    | Experiment name, organizes checkpoints by run      |
+| `--model`      | `Qwen/Qwen3-4B` | HuggingFace model path                             |
+| `--n-rollouts` | `8`             | Number of rollouts per prompt                      |
+| `--batch-size` | `8`             | Training batch size                                |
+| `--max-length` | `8192`          | Maximum generation length                          |
+| `--max-steps`  | `0` (unlimited) | Limit training to N steps (useful for quick tests) |
+| `--fresh`      | `False`         | Start fresh, ignore previous checkpoints           |
+| `--force`      | `False`         | Skip confirmation prompts (needed for `--detach`)  |
+| `--extra-args` | `""`            | Additional Hydra config overrides                  |
+
+#### Checkpoint Lifecycle
+
+Each run's state is stored in its own subdirectory: `code-search-checkpoints/{run-name}/`
+
+```
+code-search-checkpoints/
+├── exp-v1/
+│   ├── global_step_100/
+│   ├── global_step_200/
+│   ├── exported_model/
+│   └── trajectories/
+├── exp-v2/
+│   └── ...
+```
+
+- **Checkpoints** (`global_step_X/`): Model weights and optimizer state, saved every N steps
+- **Trajectories** (`trajectories/`): Agent interaction traces from rollout generation
+- **Exported Model** (`exported_model/`): HuggingFace-compatible model for inference
+
+**Resume behavior**: Without `--fresh`, training resumes from the latest checkpoint in that run.
+
+**Fresh start**: With `--fresh`, checkpoints are ignored but files remain. To fully delete a run:
+
+```bash
+# Delete a specific run
+modal volume rm code-search-checkpoints exp-v1 --recursive
+
+# Clear all runs
+modal volume rm code-search-checkpoints --recursive
 ```
 
 #### Download Results
 
 ```bash
-# Download trained model
-modal volume get code-search-checkpoints exported_model/ ./local_model/
+# Download trained model from a specific run
+modal volume get code-search-checkpoints exp-v1/exported_model/ ./local_model/
 
 # Download trajectories
-modal volume get code-search-checkpoints trajectories/ ./trajectories/
+modal volume get code-search-checkpoints exp-v1/trajectories/ ./trajectories/
 ```
 
 #### GPU Options
