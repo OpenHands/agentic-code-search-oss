@@ -113,12 +113,80 @@ def convert_to_entity_format(locations: List[Dict[str, str]]) -> List[str]:
             entity = f"{file_path}:{class_name}.{func_name}"
         else:
             entity = f"{file_path}:{func_name}"
-        if entity.endswith(".__init__"):
-            entity = entity[: (len(entity) - len(".__init__"))]
+
+        # Keep the __init__ suffix and treat it as a function within the module (this is how the ground truth is)
+        # if entity.endswith(".__init__"):
+        #     entity = entity[: (len(entity) - len(".__init__"))]
         entities.append(entity)
     entities = list(set(entities))  # Remove duplicates
     return entities
 
+
+def parse_structured_outputs(structured_locations: List[dict]) -> Tuple[List[str], List[str], List[str]]:
+    """
+    Process structured location outputs and extract files, modules, and entities.
+
+    Args:
+        structured_locations: List of dicts with 'file', 'class_name', 'function_name' keys
+        Returns:
+            Tuple of (all_found_files, all_found_modules, all_found_entities) where each is a list of strs
+    
+    Example structured input format:
+        [
+            {'file': 'path/to/file1.py', 'class_name': 'MyClass', 'function_name': 'my_method'},
+            {'file': 'path/to/file2.py', 'class_name': None, 'function_name': 'standalone_function'},
+            {'file': 'path/to/file1.py', 'class_name': None, 'function_name': 'global_function'},
+            {'file': 'path/to/file2.py', 'class_name': 'AnotherClass', 'function_name': None},
+            {'file': 'path/to/file3.py', 'class_name': None, 'function_name': None}
+        ]
+    
+    Example output:
+        [['path/to/file1.py', 'path/to/file2.py', 'path/to/file3.py'], ['path/to/file1.py:MyClass', 'path/to/file2.py:AnotherClass', 'path/to/file1.py:global_function', 'path/to/file2.py:standalone_function'], ['path/to/file1.py:MyClass.my_method', 'path/to/file2.py:standalone_function', 'path/to/file1.py:global_function', 'path/to/file2.py:AnotherClass']]
+    """
+
+    # Strict sanity check: if there are duplicates in the output, return an empty output so that it is penalized with 0 reward?
+    all_found_files = []
+    all_found_modules = []
+    all_found_entities = []
+
+    found_empty_filename = False
+    # found_duplictes = False
+
+    for location in structured_locations:
+        file_path = location.get("file", None)
+        class_name = location.get("class_name", None)
+        function_name = location.get("function_name", None)
+
+        #NOTE: Ideally the case of file_path being None should raise an error from the agent-sdk but adding here for safety
+        if file_path is None or file_path.strip() == "":
+            found_empty_filename = True
+            break
+
+        all_found_files.append(file_path)
+
+        module = None
+        if class_name:
+            module = f"{file_path}:{class_name}"
+        elif function_name:
+            module = f"{file_path}:{function_name}"
+        
+        if module:
+            all_found_modules.append(module)
+
+        entity = None
+        if class_name and function_name:
+            entity = f"{file_path}:{class_name}.{function_name}"
+        elif function_name:
+            entity = f"{file_path}:{function_name}"
+
+        if entity:
+            all_found_entities.append(entity)
+    if found_empty_filename:
+        return [], [], []
+    all_found_files = list(set(all_found_files))
+    all_found_modules = list(set(all_found_modules))
+    all_found_entities = list(set(all_found_entities))
+    return all_found_files, all_found_modules, all_found_entities
 
 def get_simple_results_from_raw_outputs(
     raw_output: str,

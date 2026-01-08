@@ -75,7 +75,7 @@ uv run --isolated -m src.train \
   +generator.engine_init_kwargs.enable_auto_tool_choice=true \
   +generator.engine_init_kwargs.tool_call_parser="hermes" \
   +generator.engine_init_kwargs.max_model_len=40960 \
-  +generator.prompts.system_prompt="templates/system_prompt_custom_finish.j2" \
+  +generator.prompts.system_prompt="templates/system_prompt.j2" \
   +generator.prompts.user_prompt="templates/file_module.j2" \
   trainer.epochs=5 \
   trainer.eval_batch_size=100 \
@@ -118,5 +118,5 @@ uv run --isolated -m src.train \
   trainer.resume_mode=latest \
   trainer.ckpt_path="$CKPT_PATH" \
   trainer.max_ckpts_to_keep=5 \
-  $OTHER_OPTION \
+  $OTHER_OPTION
   # +generator.engine_init_kwargs.reasoning_parser=qwen3 \

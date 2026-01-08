@@ -1,0 +1,5 @@
+export VIRTUAL_ENV=/data/user_data/adityabs/uv_cache/agentic-code-search-oss2
+export UV_CACHE_DIR=/data/user_data/adityabs/uv_cache/.cache
+source /data/user_data/adityabs/uv_cache/agentic-code-search-oss2/bin/activate
+export VLLM_CACHE_ROOT="/data/user_data/adityabs/vllm_cache"
+export RAY_TMPDIR="/data/user_data/adityabs/ray_tmp"

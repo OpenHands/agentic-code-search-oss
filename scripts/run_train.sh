@@ -1,0 +1,12 @@
+bash scripts/run_async_training.sh \
+-m Qwen/Qwen3-4B-Instruct-2507 \
+-n 8 \
+-b 32 \
+-c 1 \
+-r "Qwen3-4b-custom-finish-test" \
+-w false \
+-s /data/user_data/adityabs/agentic_code_search/custom_finish_test \
+-i 4 \
+-t 4 \
+-d data/adityasoni17__SWE-smith-py-code-search_train \
+-o "+generator.reward=custom_config.yaml" > /data/user_data/adityabs/custom_finish_test.out 2>&1

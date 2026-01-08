@@ -56,13 +56,14 @@ from openhands.sdk import (
     LLMConvertibleEvent,
     get_logger,
 )
-
+from openhands.sdk.event import ActionEvent
+from src.tools.localization_finish import LocalizationFinishAction, LocalizationFinishTool
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
-# from src.tools import TOOL_REGISTRY
+from src.tools import TOOL_REGISTRY
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
@@ -72,9 +73,34 @@ import signal
 
 logger = get_logger(__name__)
 # logger.setLevel(logging.WARNING)
-logger.setLevel(logging.ERROR)
+logger.setLevel(logging.INFO)
 
 file_path = os.path.dirname(__file__)
+
+def get_structured_locations(events: List[Event]) -> Optional[List[Dict[str, Any]]]:
+    """Extract structured locations from LocalizationFinishAction in events.
+    Args:
+        events: List of conversation events to search through.
+    Returns:
+        List of location dicts with 'file', 'class', 'function' keys, or None if not found.
+    """
+    # Find the last LocalizationFinishAction
+    for event in reversed(events):
+        if (
+            isinstance(event, ActionEvent)
+            and event.source == "agent"
+            and isinstance(event.action, LocalizationFinishAction)
+        ):
+            # Extract structured locations from the action
+            locations = []
+            for loc in event.action.locations:
+                locations.append({
+                    "file": loc.file,
+                    "class_name": loc.class_name,
+                    "function_name": loc.function_name,
+                })
+            return locations
+    return None
 
 @ray.remote(num_cpus=0.01)
 def init_and_run(
@@ -91,7 +117,7 @@ def init_and_run(
 
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
-    commit_id = instance["base_commit"]
+    commit_id = instance.get("base_commit", None)
     if "use_patch" in instance and instance["use_patch"]:
         patch = instance["patch"]
     else:
@@ -99,7 +125,7 @@ def init_and_run(
     
     # Avoid collisions in /tmp testbed directories
     uuid_str = str(uuid.uuid4())[:8]
-    workspace = Path(f"/tmp/testbed/{uuid_str}/")
+    workspace = Path(f"/scratch/workspace/{uuid_str}/")
     status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace, patch)
 
     if training_phase == "eval":
@@ -108,6 +134,7 @@ def init_and_run(
         temperature = 1.0
 
     final_message = ""
+    structured_locations = None
     messages = []
 
     # for tool_name in generator_cfg.tools:
@@ -120,10 +147,12 @@ def init_and_run(
     #     Tool(name=tool_name) for tool_name in generator_cfg.tools
     # ]
 
+    register_tool(LocalizationFinishTool.name, LocalizationFinishTool)
     tools = [
-        Tool(name=GlobTool.name),
-        Tool(name=GrepTool.name),
+        # Tool(name=GlobTool.name),
+        # Tool(name=GrepTool.name),
         Tool(name=TerminalTool.name),
+        Tool(name="localization_finish"),
     ]
 
     # Get prompt paths from config (path-independent)
@@ -131,7 +160,10 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
-    agent = Agent(
+    assert os.path.exists(system_prompt_path), f"System prompt file {system_prompt_path} does not exist"
+    assert os.path.exists(user_prompt_path), f"User prompt file {user_prompt_path} does not exist"
+
+    agent = CustomAgent(
         llm=LLM(
             usage_id="agent",
             model=litellm_model_name,
@@ -141,14 +173,14 @@ def init_and_run(
             litellm_extra_body={
                 "return_token_ids": True,
                 "include_stop_str_in_output": False,
-                "add_generation_prompt": True,
                 "chat_template_kwargs": {
-                    "enable_thinking": False,
-                    }
-            },
+                    "add_generation_prompt": True,
+                    # "enable_thinking": True
+                }
+            }
         ),
         tools=tools,
-        security_analyzer=None,
+        # security_analyzer=None,
         system_prompt_filename=system_prompt_path
     )
 
@@ -159,37 +191,50 @@ def init_and_run(
         workspace=str(working_dir),
     )
     input_message = get_instruction(instance, user_prompt_path, str(working_dir))
-    conversation.send_message(input_message)
-
-    logger.info("Conversation Starting")
 
     # Capture start time
     start_time = time.time()
     start_timestamp = datetime.now().isoformat()
 
     try:
+        conversation.send_message(input_message)
+        logger.info("Conversation Starting")
         conversation.run()
+        messages = list(map(lambda event: event.model_dump(), conversation.state.events))
+        final_message = get_agent_final_response(conversation.state.events)
+        structured_locations = get_structured_locations(conversation.state.events)
     except Exception as e:
-        logger.error(f"Error during conversation run: {e}", exc_info=True)
+        logger.error(f"Error during conversation: {str(e)}", exc_info=True)
+        try:
+            messages = list(map(lambda event: event.model_dump(), conversation.state.events))
+            final_message = get_agent_final_response(conversation.state.events)
+            structured_locations = get_structured_locations(conversation.state.events)
+        except Exception as e:
+            logger.error(f"Error during final message extraction in err'ed rollout: {str(e)}", exc_info=True)
+            messages = []
+            final_message = ""
+    finally:
+        # Capture end time
+        try:
+            if workspace.exists():
+                os.system(f"rm -rf {str(workspace)}")
+                logger.info(f"Removed workspace {str(workspace)}")
+            conversation.close()
+        except Exception as _:
+            pass
+        logger.info("Conversation Finished")
+        end_time = time.time()
+        end_timestamp = datetime.now().isoformat()
+        wall_clock_duration = end_time - start_time
 
-    messages = list(map(lambda event: event.model_dump(), conversation.state.events))
-    final_message = get_agent_final_response(conversation.state.events)
+        additional_attr = {
+            "wall_clock_duration": wall_clock_duration,
+            "start_timestamp": start_timestamp,
+            "end_timestamp": end_timestamp
+        }
 
-    conversation.close()
-    logger.info("Conversation Finished")
-
-    # Capture end time
-    end_time = time.time()
-    end_timestamp = datetime.now().isoformat()
-    wall_clock_duration = end_time - start_time
-
-    additional_attr = {
-        "wall_clock_duration": wall_clock_duration,
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp
-    }
-
-    return messages, final_message, additional_attr
+    # NOTE: Hard-coded final message to ensure all rollouts that don't call the custom finish tool have reward == 0
+    return messages, "", structured_locations, additional_attr
 
 
 class CodeSearchGenerator(SkyRLGymGenerator):
@@ -206,6 +251,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         super().__init__(
             generator_cfg, skyrl_gym_cfg, inference_engine_client, tokenizer, model_name
         )
+        # logger.info(f"Engine design: {inference_engine_client.engines[0].inference_engine_actor.openai_serving_chat}")
 
         self.http_endpoint_host = generator_cfg.get(
             "http_endpoint_host", "127.0.0.1"
@@ -219,7 +265,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.tokenizer = tokenizer
         self.model_name = model_name
         # self.litellm_model_name = "openai/" + self.model_name
-        self.litellm_model_name = "litellm_proxy/" + self.model_name
+        self.litellm_model_name = "openai/" + self.model_name
 
         # if self.generator_cfg.chat_template.name_or_path is not None:
         #     raise NotImplementedError(
@@ -228,7 +274,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         self.step_wise = step_wise
         self.max_train_length = generator_cfg.get(
-            "max_train_length", 32768
+            "max_train_length", 100000
         )
 
     async def code_search_loop(
@@ -246,7 +292,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         instance = env_extras
         error = None
         try:
-            messages, final_message, additional_attr = await init_and_run.remote(
+            messages, final_message, structured_locations, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
                 self.base_url,
@@ -258,11 +304,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 batch_metadata.training_phase,
             )
         except Exception as e:
-            logger.error(f"Error in starting conversation: {e}", exc_info=True)
+            logger.error(f"Critical Error in conversation: {str(e)}", exc_info=True)
             # TODO properly handle this
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
+            structured_locations = None
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
@@ -285,6 +332,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     "final_message": final_message,
                     "messages": messages,
                     "instance": instance,
+                    "structured_locations": structured_locations
                 }
 
                 reward_fn = get_reward_function(reward_fn_args["fn"])
@@ -329,6 +377,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
+        num_steps = len(token_messages)
         if len(token_messages) > 0:
             if self.step_wise:
                 for idx, message in enumerate(token_messages):
@@ -347,7 +396,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         )
                     )
             else:
-
                 # Max Sequence for training
                 max_train_len = self.max_train_length
 
@@ -358,25 +406,64 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 current_response_ids = current_response_ids[len(current_prompt_ids):]
 
                 max_response_len = max_train_len - len(current_prompt_ids)
-
+                mask = [1]*len(token_messages[0]["response_token_ids"])
+                for i in range(1, len(token_messages)):
+                    mask += [0] * (len(token_messages[i]["prompt_token_ids"]) - len(token_messages[i-1]["prompt_token_ids"]) - len(token_messages[i-1]["response_token_ids"]))
+                    mask += [1] * len(token_messages[i]["response_token_ids"])
                 # make mask of 0 for everything inside <|im_start|> 
                 # and assistant and 1 elsewhere 
                 start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
                 end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
+                end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
                 mask = []
+                found_role_switch = False
                 inside = False
-                for token_id in current_response_ids:
-                    if token_id == start_token_id:
-                        inside = True
-                        mask.append(0)
-                    elif token_id == end_token_id:
-                        inside = False
-                        mask.append(0)
+                idx = 0
+                while idx < len(current_response_ids):
+                    token_id = current_response_ids[idx]
+                    if not inside:
+                        mask.append(1)
+                        idx += 1
+                        if token_id == end_of_turn_token_id:
+                            inside = True
                     else:
-                        if inside:
+                        if token_id == start_token_id:
+                            inside = True
                             mask.append(0)
+                            idx += 1
+                        elif token_id == end_token_id and found_role_switch:
+                            inside = False
+                            mask.append(0)
+                            mask.append(0)
+                            idx += 2
                         else:
-                            mask.append(1)
+                            mask.append(0)
+                            idx += 1
+
+                        if token_id == start_token_id:
+                            found_role_switch = True
+                        else:
+                            found_role_switch = False
+
+
+                # for token_id in current_response_ids:
+                #     if token_id == start_token_id:
+                #         inside = True
+                #         mask.append(0)
+                #     elif token_id == end_token_id and found_role_switch: # mark as start of assistant response only if the immediately previous token is <im_start>, else it is present in between somewhere
+                #         inside = False
+                #         mask.append(0)
+                #     else:
+                #         if inside:
+                #             mask.append(0)
+                #         else:
+                #             mask.append(1)
+                #     if token_id == start_token_id:
+                #         found_role_switch = True
+                #     else:
+                #         found_role_switch = False
+                #     if token_id == end_of_turn_token_id and not inside:
+                #         inside = True
 
                 # mask zero out everything beyond max_response_len
                 # Don't truncate the response, just mask out the loss
@@ -397,6 +484,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 )
 
         else:
+            # Ideally the code should not reach here
             response_ids = [151643]
             stop_reason = "error"
             loss_mask = [1]

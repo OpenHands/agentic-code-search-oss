@@ -1,16 +1,17 @@
 import ast
 
-from .module_rewards import get_simple_results_from_raw_outputs
+from .module_rewards import get_simple_results_from_raw_outputs, parse_structured_outputs
 
 from src.rewards import reward
 
 def compute_file_f1_score(predicted_files, true_files):
     pred, true = set(predicted_files), set(true_files)
+    if not true:
+        return 0.0 # return 0 reward if ground truth is empty
     tp = len(pred & true)
     precision = tp / len(pred) if pred else 0.0
     recall = tp / len(true) if true else 0.0
-    if not pred and not true:
-        return 1.0
+
     return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
 # def file_localization_f1_reward(final_message, instance):
@@ -32,12 +33,13 @@ def file_localization_f1_reward(
     file_level_score = compute_file_f1_score(all_found_files, true_files)
     weighted_file_score = file_level_weight * file_level_score
 
-    return weighted_file_score, {"file_reward": file_level_score}
+    return weighted_file_score, {"file_level_score": file_level_score}
 
 @reward("multilevel_localization_f1_reward")
 def multilevel_localization_f1_reward(
     final_message: str,
     instance: dict,
+    structured_locations: list[dict] | None = None,
     file_level_weight: float=1.0,
     module_level_weight: float=1.0,
     entity_level_weight: float=1.0,
@@ -66,7 +68,10 @@ def multilevel_localization_f1_reward(
     gt_modules = set(gt_modules)
     gt_entities = set(gt_entities)
 
-    predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
+    if structured_locations is not None:
+        predicted_files, predicted_modules, predicted_entities = parse_structured_outputs(structured_locations)
+    else:
+        predicted_files, predicted_modules, predicted_entities = get_simple_results_from_raw_outputs(final_message)
 
     file_f1_score = compute_file_f1_score(predicted_files, gt_files)
     module_f1_score = compute_file_f1_score(predicted_modules, gt_modules)
