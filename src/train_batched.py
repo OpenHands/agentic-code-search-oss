@@ -86,7 +86,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             'enabled': True,
             'embedding_model': 'jinaai/jina-code-embeddings-0.5b',
             'reranker_model': None,
-            'max_indices': 50
+            'max_indices': 15
         }))
         return CodeSearchGenerator(
             model_name=cfg.trainer.policy.model.path,
@@ -179,7 +179,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             embedding_model=semantic_config.get("embedding_model", "jinaai/jina-code-embeddings-0.5b"),
             reranker_model=semantic_config.get("reranker_model"),
             cache_dir=batch_config.cache_dir,
-            max_indices=semantic_config.get("max_indices", 50),
+            max_indices=semantic_config.get("max_indices", 15),
         )
         
         # Verify actor is accessible
@@ -384,9 +384,15 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
                             logger.warning(f"[Batch {batch_idx}] ⚠️  No progress in {time_since_progress:.0f}s")
                             logger.warning(f"[Batch {batch_idx}] Completed: {len(results)}/{len(futures)}")
                             logger.warning(f"[Batch {batch_idx}] Possibly stuck on:")
-                            for future in remaining_futures[:3]:
+                            for future in remaining_futures:
+                                try:
+                                    ray.cancel(future)
+                                except:
+                                    pass
                                 repo_name, commit = task_mapping[future]
-                                logger.warning(f"  - {repo_name}@{commit[:7]}")
+                                errors.append((repo_name, commit, "Indexing timeout"))
+                            
+                            break
                         
                         # Wait for next completion
                         done, remaining_futures = ray.wait(remaining_futures, num_returns=1, timeout=5.0)
@@ -696,7 +702,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
             raise
     
     def run(self):
-        """Main training loop with resume support."""
+        """Main training loop with resume support and failure handling."""
         if not self.cfg.get("batched_indexing", {}).get("enabled", False):
             logger.info("[Training] Regular training (batched disabled)")
             trainer = super()._setup_trainer()
@@ -706,18 +712,7 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
         logger.info("[Training] Batched training mode")
         self.setup_batched_indexing()
         
-        # ✅ Determine starting batch (resume support)
-        start_batch = self.batch_state_manager.get_resume_batch()
-        
-        if start_batch is None:
-            logger.info("[Training] All batches already complete!")
-            return
-        
-        if start_batch > 0:
-            logger.info(f"[Training] ⚡ RESUMING from batch {start_batch}")
-            logger.info(f"[Training] Batches 0-{start_batch-1} already complete")
-        
-        # ✅ Create shared tracker
+        # Create shared tracker
         from skyrl_train.utils.tracking import Tracking
         logger.info("[Training] Creating shared tracker...")
         self._shared_tracker = Tracking(
@@ -728,10 +723,30 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
         )
         
         num_batches = self.batch_manager.num_batches
+        logger.info(f"[Training] Total batches: {num_batches}")
+        
+        # ✅ NEW: Get next batch to run (skips complete/failed)
+        start_batch = self.batch_state_manager.get_next_batch_to_run()
+        
+        if start_batch is None:
+            logger.info("[Training] ✓ All batches complete or permanently failed!")
+            self.batch_state_manager.print_summary()
+            return
+        
+        if start_batch > 0:
+            logger.info(f"[Training] ⚡ RESUMING from batch {start_batch}")
+            logger.info(f"[Training] Batches 0-{start_batch-1} already processed")
+        
         logger.info(f"[Training] Processing batches {start_batch} to {num_batches-1}\n")
         
         try:
-            for batch_idx in range(start_batch, num_batches):  # ✅ Start from resume point
+            # ✅ NEW: Loop through ALL batches, but skip complete/failed ones
+            for batch_idx in range(start_batch, num_batches):
+                # Check if should skip
+                if self.batch_state_manager.should_skip_batch(batch_idx):
+                    logger.info(f"[Batch {batch_idx}] Skipping (already complete or failed)")
+                    continue
+                
                 try:
                     self.run_batch(batch_idx)
                     
@@ -743,17 +758,20 @@ class BatchedCodeSearchPPOExp(BasePPOExp):
                     )
                     
                 except Exception as e:
-                    logger.error(f"[Batch {batch_idx}] Failed: {e}")
+                    logger.error(f"[Batch {batch_idx}] ✗ Failed: {e}")
                     import traceback
                     logger.error(traceback.format_exc())
                     
-                    if not self.cfg.get("batched_indexing", {}).get("continue_on_batch_failure", False):
-                        raise
-                    logger.warning(f"[Batch {batch_idx}] Continuing to next batch...")
+                    # Mark as failed so it's skipped on next run
+                    self.batch_state_manager.fail_batch(batch_idx, str(e))
+                    
+                    # ✅ Let it crash - shell script will restart
+                    logger.error(f"[Batch {batch_idx}] Exiting to trigger restart...")
+                    raise  # ← Just re-raise, don't continue
             
-            logger.info("[Training] ✓ All batches complete!")
+            logger.info("[Training] ✓ All batches processed!")
             
-            # ✅ Print final summary
+            # Print final summary
             self.batch_state_manager.print_summary()
         
         finally:
@@ -807,7 +825,8 @@ def main(cfg: DictConfig) -> None:
     
     excludes = [
         "ckpts/", "*.ckpt", "*.pth", "*.pt", "*.safetensors", "*.bin",
-        "logs/", "*.log", "*.out", "*.err",
+        "ckpts_first/", "ckpts_rew_1/", "ckpts_rew_2/", "ckpts_rew_2_1/", "ckpts_rew_3/", "ckpts_rew_4/",
+        "logs/", "*.log", "*.out", "*.err","hf_rew_1/", "hf_rew_2/", "hf_rew_2_1/", "hf_rew_3/", "hf_rew_4/",
         ".cache/", "__pycache__/", "*.pyc", ".pytest_cache/",
         ".venv/", "venv/", "env/", "ray_temp*/", "ray_spill/",
         "trajectories/", ".git/", "outputs/", "multirun/",

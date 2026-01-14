@@ -100,7 +100,65 @@ class BatchStateManager:
                 f"[BatchState] Total batches mismatch! "
                 f"State has {self.state['total_batches']}, but dataset has {self.total_batches}"
             )
+    def should_skip_batch(self, batch_idx: int) -> bool:
+        """
+        Check if this batch should be skipped.
+        
+        Returns True if:
+        - Batch is already complete
+        - Batch has failed (skip immediately, no retries)
+        """
+        batch_key = str(batch_idx)
+        
+        if batch_key not in self.state['batches']:
+            return False
+        
+        batch_data = self.state['batches'][batch_key]
+        
+        # Skip if already complete
+        if batch_data['status'] == 'complete':
+            logger.info(f"[BatchState] Batch {batch_idx} already complete, skipping")
+            return True
+        
+        # Skip if failed (no retries)
+        if batch_data['status'] == 'failed':
+            logger.warning(f"[BatchState] Batch {batch_idx} previously failed, skipping")
+            return True
+        
+        return False
     
+    def increment_batch_failure(self, batch_idx: int, error: str):
+        """Increment failure count for a batch instead of marking as permanently failed."""
+        batch_key = str(batch_idx)
+        
+        if batch_key not in self.state['batches']:
+            self.start_batch(batch_idx)
+        
+        batch_data = self.state['batches'][batch_key]
+        failure_count = batch_data.get('failure_count', 0) + 1
+        
+        self.state['batches'][batch_key]['status'] = 'failed'
+        self.state['batches'][batch_key]['failure_count'] = failure_count
+        self.state['batches'][batch_key]['last_error'] = error
+        self.state['batches'][batch_key]['end_time'] = datetime.now().isoformat()
+        
+        self.save()
+        logger.warning(f"[BatchState] Batch {batch_idx} failure #{failure_count}: {error[:100]}")
+
+    def get_next_batch_to_run(self) -> Optional[int]:
+        """
+        Get the next batch that should be run.
+        
+        Returns:
+        - Next incomplete batch (skip complete and permanently failed)
+        - None if all batches are done/failed
+        """
+        for batch_idx in range(self.total_batches):
+            if not self.should_skip_batch(batch_idx):
+                return batch_idx
+        
+        return None 
+        
     def save(self):
         """Save state to disk atomically."""
         self.state['last_updated'] = datetime.now().isoformat()

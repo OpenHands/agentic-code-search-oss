@@ -1,0 +1,21 @@
+reward:
+  # PRIMARY SIGNAL: Task accuracy
+  - fn: multilevel_localization_f1_reward
+    args:
+      file_level_weight: 1.0
+      module_level_weight: 1.0
+      entity_level_weight: 1.0
+  
+  # CONSTRAINT: Must explore
+  - fn: exploration_constraint
+  
+  # FORMAT: Proper output format
+  - fn: output_format_reward
+  
+  # ENCOURAGEMENT: Small bonus for tool usage
+  - fn: tool_use_reward
+  
+  # EFFICIENCY: Don't go too long
+  - fn: turn_efficiency
+    args:
+      max_turns: 12

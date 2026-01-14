@@ -65,3 +65,54 @@ def extract_functions_from_patch(input_diff: str):
     return targets
     # return results
 
+def extract_ground_truth_from_file_changes(file_changes):
+    """
+    Extract ground truth sets from pre-parsed file_changes field.
+    
+    Args:
+        file_changes: List of dicts with format:
+            [{'file': 'path/to/file.py', 
+              'changes': {
+                  'edited_modules': ['file.py:Class1', ...],
+                  'added_modules': [...],
+                  'edited_entities': ['file.py:Class1.method', ...],
+                  'added_entities': [...]
+              }
+            }, ...]
+    
+    Returns:
+        Tuple of (files_set, modules_set, entities_set)
+    """
+    files = set()
+    modules = set()
+    entities = set()
+    
+    if not file_changes:
+        return files, modules, entities
+    
+    for change in file_changes:
+        file_path = change["file"]
+        files.add(file_path)
+        
+        changes = change["changes"]
+        
+        # Add modules (classes)
+        edited_modules = changes.get("edited_modules") or []
+        added_modules = changes.get("added_modules") or []
+        
+        for module in edited_modules + added_modules:
+            # Format: "file.py:ClassName"
+            # Store as-is for exact matching
+            modules.add(module)
+        
+        # Add entities (functions/methods)
+        edited_entities = changes.get("edited_entities") or []
+        added_entities = changes.get("added_entities") or []
+        
+        for entity in edited_entities + added_entities:
+            # Format: "file.py:Class.method" or "file.py:function"
+            # Store as-is for exact matching
+            entities.add(entity)
+    
+    return files, modules, entities
+

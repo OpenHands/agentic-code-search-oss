@@ -1,0 +1,23 @@
+reward:
+  # Core localization reward (main signal)
+  - fn: multilevel_localization_f1_reward
+    args:
+      file_level_weight: 3.0
+      module_level_weight: 2.0
+      entity_level_weight: 1.0
+  
+  # Tool usage rewards (now accounting for parallel calling)
+  - fn: semantic_search_usage_reward
+  - fn: bash_exploration_reward
+  - fn: tool_diversity_reward
+  - fn: exploration_before_answer_reward
+    args:
+      min_exploration_turns: 3
+  
+  # NEW: Bonus for effective parallel tool calling
+  - fn: parallel_tool_calling_bonus
+  
+  # Efficiency (prevent going too long)
+  - fn: turn_efficiency
+    args:
+      max_turns: 12

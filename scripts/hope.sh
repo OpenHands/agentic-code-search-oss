@@ -4,7 +4,7 @@
 #SBATCH --cpus-per-task=30
 #SBATCH --gres=gpu:8
 #SBATCH -t 2-00:00:00
-#SBATCH --job-name=rl_qwen3_4b_batched
+#SBATCH --job-name=rl_qwen3_8b_batched
 #SBATCH --error=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
 #SBATCH --output=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
 #SBATCH --nodes=1
@@ -81,30 +81,31 @@ export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # ← CRITICAL for frag
 # ============================================================================
 # Configuration
 # ============================================================================
-MODEL="Qwen/Qwen3-4B"
+MODEL="Qwen/Qwen3-8B"
 MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
 DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
 CKPT_PATH="/data/user_data/sanidhyv/agentic-code-search-oss/ckpts/code_search_${MODEL_ALIAS}_batched"
 CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"
 
 # Batched indexing configuration
-BATCH_SIZE=50  # Number of repos per batch
+BATCH_SIZE=15  # Number of repos per batch
 REPOS_DIR="/data/user_data/sanidhyv/grep"  # Where repos are cloned
 
-# Training configuration
-N_ROLLOUTS="${N_ROLLOUTS:-8}"
-TRAIN_BATCH_SIZE=4
-MAX_LENGTH=2048
-export WANDB_API_KEY="bd054e89bc6dc33ce731d090da4a87bffa973032"
-export WANDB_PROJECT="code_search_50"
+# ✅ UPDATED: Training configuration for 8B model (memory optimized)
+N_ROLLOUTS="${N_ROLLOUTS:-2}"  # Keep generation the same
+TRAIN_BATCH_SIZE=4  # ← REDUCED from 4 for 8B model
+MAX_LENGTH=1024  # ← REDUCED from 2048 to save training memory
+MAX_PROMPT_LENGTH=2048  # ← REDUCED from 4096
+
+export WANDB_PROJECT="code_search_8b_15"
 
 # Resource allocation
 NUM_GPUS=8
 NNODES=1
 HALF_NUM_GPUS=$((NUM_GPUS / 2))
-NUM_INFERENCE_ENGINES=4  # Half for inference
+NUM_INFERENCE_ENGINES=2  # Half for inference
 NUM_TRAINING_ENGINES=4   # Half for training
-TP_SIZE=1  
+TP_SIZE=2
 LOGGER=wandb
 RUN_NAME="code_search_${MODEL_ALIAS}_batched_b${BATCH_SIZE}"
 
@@ -116,38 +117,6 @@ export HYDRA_FULL_ERROR=1
 MAX_RESTART_ATTEMPTS=10
 RESTART_DELAY=300
 mkdir -p /data/user_data/sanidhyv/ray_spill
-# rm -r ckpts
-# ============================================================================
-# Pre-Index First Batch (GPU)
-# ============================================================================
-echo "=================================================="
-echo "Pre-indexing first batch on GPU"
-echo "=================================================="
-echo "This uses GPU for fast embedding generation"
-echo "Training will use CPU for retrieval (no GPU contention)"
-echo "=================================================="
-
-# # Clone repos if needed
-# if [ ! -d "$REPOS_DIR" ] || [ -z "$(ls -A $REPOS_DIR)" ]; then
-#     echo "Cloning repos..."
-#     uv run python scripts/clone_and_index_repos.py \
-#         --output-dir "$REPOS_DIR" \
-#         --cache-dir "$CACHE_DIR" \
-#         --dataset "SWE-Gym/SWE-Gym" \
-#         --split train \
-#         --max-repos "$BATCH_SIZE" \
-#         --skip-indexing  # Only clone, indexing done separately
-# fi
-
-# # Index first batch on GPU
-# echo "Indexing batch 0 on GPU..."
-# uv run python scripts/index_batch.py \
-#     --batch-idx 0 \
-#     --batch-size "$BATCH_SIZE" \
-#     --cache-dir "$CACHE_DIR" \
-#     --repos-dir "$REPOS_DIR"
-
-# echo "First batch indexed successfully!"
 
 # ============================================================================
 # Training Loop with Auto-Restart
@@ -155,6 +124,10 @@ echo "=================================================="
 echo "=================================================="
 echo "Starting Batched Training with Auto-Restart"
 echo "=================================================="
+echo "Model: $MODEL (8B - Memory Optimized)"
+echo "Training Batch Size: $TRAIN_BATCH_SIZE (reduced for 8B)"
+echo "Max Length: $MAX_LENGTH (reduced for 8B)"
+echo "Max Prompt Length: $MAX_PROMPT_LENGTH (reduced for 8B)"
 echo "Max restart attempts: $MAX_RESTART_ATTEMPTS"
 echo "=================================================="
 
@@ -176,7 +149,7 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
     
     set -x
     
-    # Launch training
+    # Launch training with 8B optimizations
     CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
       --config-name=ppo_base_config \
       +run_async_trainer=true \
@@ -194,6 +167,7 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
       trainer.policy.fsdp_config.cpu_offload=true \
       trainer.policy.fsdp_config.reshard_after_forward=true \
       trainer.policy.fsdp_config.fsdp_size=-1 \
+      +trainer.policy.fsdp_config.activation_checkpointing=true \
       trainer.fully_async.num_parallel_generation_workers=4 \
       trainer.placement.policy_num_gpus_per_node=$NUM_TRAINING_ENGINES \
       trainer.placement.ref_num_gpus_per_node=$NUM_TRAINING_ENGINES \
@@ -206,7 +180,7 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
       +generator.engine_init_kwargs.enable_auto_tool_choice=true \
       +generator.engine_init_kwargs.tool_call_parser=hermes \
       +generator.engine_init_kwargs.reasoning_parser=qwen3 \
-      +generator.engine_init_kwargs.max_model_len=16384 \
+      +generator.engine_init_kwargs.max_model_len=10240 \
       trainer.epochs=1 \
       trainer.eval_batch_size=100 \
       trainer.eval_before_train=false \
@@ -220,11 +194,11 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
       trainer.export_path="$CKPT_PATH/exported_model/" \
       trainer.hf_save_interval=-1 \
       trainer.ckpt_interval=100 \
-      trainer.max_prompt_length=4096 \
+      trainer.max_prompt_length=$MAX_PROMPT_LENGTH \
       generator.sampling_params.max_generate_length=$MAX_LENGTH \
       generator.sampling_params.temperature=1.0 \
-      generator.max_input_length=24000 \
-      generator.max_num_batched_tokens=48000 \
+      generator.max_input_length=8000 \
+      generator.max_num_batched_tokens=16000 \
       generator.max_turns=20 \
       trainer.policy.optimizer_config.lr=1.0e-6 \
       trainer.algorithm.use_kl_loss=False \
@@ -237,8 +211,8 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
       generator.async_engine=true \
       generator.batched=false \
       generator.n_samples_per_prompt=$N_ROLLOUTS \
-      generator.gpu_memory_utilization=0.7 \
-      generator.enforce_eager=false \
+      generator.gpu_memory_utilization=0.55 \
+      generator.enforce_eager=true \
       trainer.step_wise_training=true \
       trainer.logger=$LOGGER \
       trainer.project_name=$WANDB_PROJECT \
@@ -250,7 +224,7 @@ for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
       +semantic_search.device=cpu \
       +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
       +semantic_search.reranker_model=null \
-      +semantic_search.max_indices=50
+      +semantic_search.max_indices=15
     
     exit_code=$?
     set +x
