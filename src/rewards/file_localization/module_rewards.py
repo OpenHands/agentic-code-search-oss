@@ -1,165 +1,125 @@
 import logging
-from typing import Dict, List, Tuple
+import re
+from typing import Dict, List
+
 
 def parse_simple_output(raw_output: str) -> List[Dict[str, str]]:
     """
-    Parse simplified agent output containing filename, optional class, and function.
-
-    Args:
-        raw_output: Raw text output from the agent
-
-    Returns:
-        List of dictionaries with keys: 'file', 'class' (optional), 'function'
-
-    Example input format:
-        ```
-        path/to/file1.py
-        class: MyClass
-        function: my_method
-
-        path/to/file2.py
+    Parse agent output containing filename, optional class, and function.
+    
+    Format:
+```
+        path/to/file.py
+        class: ClassName
+        function: method_name
+        
+        path/to/other.py
         function: standalone_function
-        ```
-
-    Example output:
-        [
-            {'file': 'path/to/file1.py', 'class': 'MyClass', 'function': 'my_method'},
-            {'file': 'path/to/file2.py', 'class': None, 'function': 'standalone_function'}
-        ]
+```
+    
+    Returns:
+        List of dicts with keys: 'file', 'class', 'function'
     """
-    # Remove triple backticks and whitespace
-    raw_output = raw_output.strip("` \n")
-
+    # Extract content from triple backticks
+    backtick_match = re.search(r'```(?:\w+)?\s*(.*?)\s*```', raw_output, re.DOTALL)
+    if backtick_match:
+        content = backtick_match.group(1)
+    else:
+        content = raw_output
+    
+    content = content.strip()
+    if not content:
+        return []
+    
     locations = []
     current_file = None
     current_class = None
+    file_added = False  # Track if current file has been added
 
-    lines = raw_output.strip().split("\n")
+    lines = content.split("\n")
 
     for line in lines:
         line = line.strip()
 
         if not line:
-            # Empty line resets the current class context
+            # Empty line - add pending file if needed, reset class context
+            if current_file and not file_added:
+                locations.append({
+                    "file": current_file,
+                    "class": None,
+                    "function": None
+                })
+                file_added = True
             current_class = None
             continue
 
         # Check if this is a Python file path
-        if line.endswith(".py"):
+        if line.endswith(".py") and not ":" in line:
+            # Add previous file if not added
+            if current_file and not file_added:
+                locations.append({
+                    "file": current_file,
+                    "class": None,
+                    "function": None
+                })
+            
             current_file = line
             current_class = None
+            file_added = False
             continue
 
-        # Parse class declaration
-        if line.startswith("class:"):
-            class_name = line[len("class:") :].strip()
+        # Parse class declaration (case-insensitive)
+        class_match = re.match(r'^(?:class|Class):\s*(.+)$', line, re.IGNORECASE)
+        if class_match and current_file:
+            class_name = class_match.group(1).strip()
             current_class = class_name
             continue
 
-        # Parse function/method declaration
-        if line.startswith("function:") or line.startswith("method:"):
-            if not current_file:
-                logging.warning(f"Found function/method without a file: {line}")
-                continue
-
-            func_text = line.split(":", 1)[1].strip()
-            func_name = func_text.split()[0].strip("() ")
-
-            # Check if function includes class prefix (e.g., "MyClass.my_method")
+        # Parse function/method declaration (case-insensitive)
+        func_match = re.match(r'^(?:function|method|Function|Method):\s*(.+)$', line, re.IGNORECASE)
+        if func_match and current_file:
+            func_text = func_match.group(1).strip()
+            
+            # Remove parameters if present: "my_function(args)" -> "my_function"
+            func_name = func_text.split("(")[0].strip()
+            
+            # Check if function includes class prefix: "MyClass.my_method"
             if "." in func_name:
-                parts = func_name.split(".", 1)
-                class_name = parts[0]
-                method_name = parts[1]
+                parts = func_name.rsplit(".", 1)
+                class_name = parts[0].strip()
+                method_name = parts[1].strip()
 
-                locations.append(
-                    {"file": current_file, "class": class_name, "function": method_name}
-                )
+                locations.append({
+                    "file": current_file,
+                    "class": class_name,
+                    "function": method_name
+                })
             else:
                 # Standalone function or method within current class context
-                locations.append(
-                    {
-                        "file": current_file,
-                        "class": current_class,
-                        "function": func_name,
-                    }
-                )
+                locations.append({
+                    "file": current_file,
+                    "class": current_class,
+                    "function": func_name,
+                })
+            
+            file_added = True
+
+    # Add final pending file
+    if current_file and not file_added:
+        locations.append({
+            "file": current_file,
+            "class": None,
+            "function": None
+        })
 
     return locations
 
 
-def convert_to_entity_format(locations: List[Dict[str, str]]) -> List[str]:
+def get_simple_results_from_raw_outputs(raw_output: str) -> List[Dict[str, str]]:
     """
-    Convert location dictionaries to entity identifier format.
-
-    Args:
-        locations: List of dicts with 'file', 'class', 'function' keys
-
+    Process raw output and return structured results.
+    
     Returns:
-        List of entity identifiers in format 'file.py:ClassName.function_name'
-        or 'file.py:function_name' for standalone functions
-
-    Example:
-        Input: [{'file': 'test.py', 'class': 'MyClass', 'function': 'method'}]
-        Output: ['test.py:MyClass.method']
+        List of location dicts with keys: file, class, function
     """
-    entities = []
-
-    for loc in locations:
-        file_path = loc["file"]
-        class_name = loc.get("class")
-        func_name = loc["function"]
-
-        if class_name:
-            entity = f"{file_path}:{class_name}.{func_name}"
-        else:
-            entity = f"{file_path}:{func_name}"
-        if entity.endswith(".__init__"):
-            entity = entity[: (len(entity) - len(".__init__"))]
-        entities.append(entity)
-    entities = list(set(entities))  # Remove duplicates
-    return entities
-
-
-def get_simple_results_from_raw_outputs(
-    raw_output: str,
-) -> Tuple[List[str], List[str], List[str]]:
-    """
-    Process raw output and extract files, modules, and entities.
-
-    This is a simplified version of get_loc_results_from_raw_outputs() that
-    doesn't require a dependency graph for validation.
-
-    Args:
-        raw_output: Raw text output from the agent
-
-    Returns:
-        Tuple of (all_found_files, all_found_modules, all_found_entities)
-        where each is a list of strs
-    """
-    all_found_files = []
-    all_found_modules = []
-    all_found_entities = []
-
-    locations = parse_simple_output(raw_output)
-    files = list(set([loc["file"] for loc in locations]))
-    # Convert to entity format
-    entities = convert_to_entity_format(locations)
-
-    # Extract modules (file:class or file if no class)
-    modules = []
-    for entity in entities:
-        # Extract module (class or just file if standalone function)
-        if "." in entity.split(":")[-1]:
-            # Has a class - extract it: "file.py:Class.method" → "file.py:Class"
-            module = entity.rsplit(".", 1)[0]
-        else:
-            # No class - use full entity: "file.py:function" → "file.py:function"
-            module = entity
-        if module not in modules:
-            modules.append(module)
-
-    all_found_files = files
-    all_found_modules = list(set(modules))
-    all_found_entities = entities
-
-    return all_found_files, all_found_modules, all_found_entities
+    return parse_simple_output(raw_output)

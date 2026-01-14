@@ -1,0 +1,87 @@
+[project]
+name = "src"
+version = "0.0.1"
+readme = "README.md"
+classifiers = [
+    "Development Status :: 3 - Alpha",
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+requires-python = ">=3.13"
+license = { "text" = "MIT" }
+dependencies = [
+    "skyrl-train",
+    "transformers==4.57.3",
+    "openhands-tools",
+    "openhands-agent-server",
+    "openhands-workspace",
+    "vllm==0.11.0",
+    "verifiers>=0.1.6.post0",
+    "chromadb>=0.5.0",
+    "sentence-transformers>=3.0.0",
+    "tree-sitter>=0.25.2",
+    "tree-sitter-python>=0.23.0",
+    "datasets>=4.0.0",
+    "ipykernel>=7.1.0",
+    "ipywidgets>=8.1.8",
+    "matplotlib>=3.10.7",
+    "seaborn>=0.13.2",
+    "gcsfs>=2025.3.0",
+    "lmcache",
+]
+
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[tool.setuptools]
+py-modules = ["swe_grep_oss_env"]
+
+[tool.setuptools.packages.find]
+where = ["."]
+include = ["src", "software-agent-sdk"]
+
+[dependency-groups]
+dev = [
+    "pytest>=9.0.2",
+    "pre-commit>=4.3.0",
+    "psutil>=7.0.0",
+    "pyright>=1.1.405",
+    "ruff>=0.12.10",
+    "pycodestyle>=2.12.0",
+]
+
+[tool.uv]
+override-dependencies = [
+    "flash-attn",
+]
+extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
+
+
+[[tool.uv.index]]
+name = "pytorch-cu128"
+url = "https://download.pytorch.org/whl/cu128"
+explicit = true
+
+[tool.uv.extra-build-dependencies]
+flash-attn = ["torch"]
+
+[tool.uv.sources]
+skyrl-train = { git = "https://github.com/NovaSky-AI/SkyRL", rev = "69ca4d9", subdirectory = "skyrl-train" }
+flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}
+openhands-sdk = { workspace = true }
+openhands-tools = { workspace = true }
+openhands-workspace = { workspace = true }
+openhands-agent-server = { workspace = true }
+torch = { index = "pytorch-cu128" }
+torchvision = { index = "pytorch-cu128" }
+
+
+[tool.uv.workspace]
+members = [
+  "software-agent-sdk/openhands-sdk",
+  "software-agent-sdk/openhands-tools",
+  "software-agent-sdk/openhands-workspace",
+  "software-agent-sdk/openhands-agent-server",
+]

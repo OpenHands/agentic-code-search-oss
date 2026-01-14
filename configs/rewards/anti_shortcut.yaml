@@ -1,0 +1,11 @@
+reward:
+  # PRIMARY SIGNAL: F1 only
+  - fn: multilevel_localization_f1_reward
+    args:
+      file_level_weight: 1.0
+      module_level_weight: 2.0
+      entity_level_weight: 2.0
+  
+  # HARD CONSTRAINT: Must explore (blocks shortcuts)
+  - fn: exploration_constraint
+  

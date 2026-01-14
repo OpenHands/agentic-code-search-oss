@@ -1,0 +1,17 @@
+# Batched Indexing Configuration
+batched_indexing:
+  enabled: true
+  batch_size: 15  # Number of repos to index at once
+  cache_dir: "/data/user_data/sanidhyv/tmp/embedding_cache"
+  repos_dir: "/data/user_data/sanidhyv/grep"  # Where repos are cloned
+  
+  # Memory management
+  cleanup_between_batches: true
+  offload_models_during_training: true
+  max_index_retries: 2  # Number of times to retry failed indices
+  skip_failed_indices: true  # Continue training even if some indices fail
+  # Dataset configuration
+  dataset: "SWE-Gym/SWE-Gym"
+  split: "train"
+  repo_field: "repo_name"  # or "repo" for SWE-bench
+  commit_field: "base_commit"

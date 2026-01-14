@@ -5,13 +5,15 @@ from pyexpat.errors import messages
 from socket import timeout
 from typing import Dict, List, Optional, Any, Tuple, Union
 import uuid
-from omegaconf import DictConfig
+from omegaconf import DictConfig, OmegaConf
 import traceback
 import ray
 import requests
 from pathlib import Path
 import os
 import ast
+import shutil
+from pydantic import SecretStr
 import time
 from datetime import datetime
 import numpy as np
@@ -69,7 +71,6 @@ import logging
 import signal
 
 logger = get_logger(__name__)
-# logger.setLevel(logging.WARNING)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
@@ -80,116 +81,270 @@ def init_and_run(
     litellm_model_name: str,
     litellm_base_url: dict,
     generator_cfg: DictConfig,
+    semantic_search_cfg: DictConfig,
     data_source: str,
     sampling_params: dict,
     trajectory_id: Union[TrajectoryID, Any],
     global_step: int,
     training_phase: Union[TrainingPhase, Any],
 ):
-
+    import os
+    import shutil
+    
     instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
+    from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
+    expected_hash = get_repo_commit_hash(repo_name, commit_id)
+    print(f"[Episode {instance_id}] Expected hash: {expected_hash}")
+    print(f"[Episode {instance_id}] Repo: {repo_name}@{commit_id[:7]}")
+    from pathlib import Path
+    cache_dir = Path("/data/user_data/sanidhyv/tmp/embedding_cache")
+    index_path = cache_dir / expected_hash
+    ready_file = index_path / ".ready"
+
+    print(f"[Episode {instance_id}] Index path exists: {index_path.exists()}")
+    print(f"[Episode {instance_id}] .ready file exists: {ready_file.exists()}")
+
+    if not ready_file.exists():
+        print(f"[Episode {instance_id}] ❌ HASH MISMATCH - this instance should not be in training batch!")
     
-    # Avoid collisions in /tmp testbed directories
-    uuid_str = str(uuid.uuid4())[:8]
-    workspace = Path(f"/tmp/testbed/{uuid_str}/")
-    status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
-
-    if training_phase == "eval":
-        temperature = 0.6
-    else:
-        temperature = 1.0
-
-    final_message = ""
-    messages = []
-
-    for tool_name in generator_cfg.tools:
-        # Import OpenHands tools to trigger their registration
-        if tool_name in DEFAULT_OPENHANDS_TOOLS:
-            import_openhands_tool(tool_name)
-        # Register custom tools from our registry
-        elif tool_name in TOOL_REGISTRY:
-            register_tool(tool_name, TOOL_REGISTRY[tool_name])
-        else:
-            raise ValueError(f"Tool {tool_name} does not exist in the registry or default OpenHands tools")
-
-    tools = [
-        Tool(name=tool_name) for tool_name in generator_cfg.tools
-    ]
-
-    # Get prompt paths from config (path-independent)
-    prompts_base_dir = os.path.join(os.path.dirname(__file__), "..", "prompts")
-    system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
-    user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
-
-    agent = CustomAgent(
-        llm=LLM(
-            usage_id="agent",
-            model=litellm_model_name,
-            base_url=litellm_base_url,
-            api_key="sk-xxx",
-            temperature=temperature,
-            litellm_extra_body={
-                "return_token_ids": True,
-                "include_stop_str_in_output": True,
-            }
-        ),
-        tools=tools,
-        security_analyzer=None,
-        system_prompt_filename=system_prompt_path
-    )
-
-    conversation = Conversation(
-        agent=agent,
-        max_iteration_per_run=10,
-        visualizer=None,
-        workspace=str(working_dir),
-    )
-    input_message = get_instruction(instance, user_prompt_path, str(working_dir))
-    conversation.send_message(input_message)
-
-    logger.info("Conversation Starting")
-
-    # Capture start time
-    start_time = time.time()
-    start_timestamp = datetime.now().isoformat()
-
-    conversation.run()
-
-    messages = list(map(lambda event: event.model_dump(), conversation.state.events))
-    final_message = get_agent_final_response(conversation.state.events)
-
-    # remove the workspace dir
+    worker_id = os.getpid()
+    workspace = Path(f"/data/user_data/sanidhyv/tmp/testbed_{worker_id}/")
+    workspace.mkdir(parents=True, exist_ok=True)
+    
+    # Track what we created for cleanup
+    created_workspace = False
+    created_index = False
+    index_path_for_cleanup = None
+    
     try:
-        if workspace.exists():
-            os.system(f"rm -rf {str(workspace)}")
-            logger.info(f"Removed workspace {str(workspace)}")
+        status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
+        created_workspace = True
+        print(f"[Worker {worker_id}] working_dir: {working_dir}")
+
+        if training_phase == "eval":
+            temperature = 0.6
+        else:
+            temperature = 1.0
+
+        final_message = ""
+        messages = []
+
+        # Configure semantic search if enabled
+        use_semantic_search = semantic_search_cfg.get("enabled", False)
+        mcp_config = None
+        agent_context = None
+
+        print(f"[Episode {instance_id}] Semantic search config: {OmegaConf.to_yaml(semantic_search_cfg)}")
+        print(f"[Episode {instance_id}] Semantic search enabled: {use_semantic_search}")
+
+        if use_semantic_search:
+            try:
+                from openhands.sdk.context.skills import Skill
+                from openhands.sdk import AgentContext
+
+                # Get base path
+                base_path = Path(generator_cfg.get("base_path", "/data/user_data/sanidhyv/agentic-code-search-oss"))
+                skill_path = base_path / ".openhands" / "skills" / "semantic-search.md"
+                
+                print(f"[Episode {instance_id}] Looking for skill at: {skill_path}")
+                
+                if not skill_path.exists():
+                    print(f"[Episode {instance_id}] ERROR: Skill file not found at {skill_path}, semantic search disabled")
+                    use_semantic_search = False
+                else:
+                    print(f"[Episode {instance_id}] Loading skill from {skill_path}")
+                    skill = Skill.load(str(skill_path))
+                    print(f"[Episode {instance_id}] Skill loaded successfully")
+                    
+                    wrapper_path = base_path / "scripts/run_mcp_server_training.sh"
+                    
+                    print(f"[Episode {instance_id}] Looking for MCP wrapper at: {wrapper_path}")
+                    
+                    if not wrapper_path.exists():
+                        print(f"[Episode {instance_id}] ERROR: MCP wrapper not found at {wrapper_path}")
+                        use_semantic_search = False
+                    else:
+                        import stat
+                        wrapper_path.chmod(wrapper_path.stat().st_mode | stat.S_IEXEC)
+                        print(f"[Episode {instance_id}] MCP wrapper found and made executable")
+                        
+                        # Track index location for cleanup
+                        repo_commit_hash = get_repo_commit_hash(repo_name, commit_id)
+                        index_path_for_cleanup = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
+                        
+                        print(f"[Episode {instance_id}] Index will be stored at: {index_path_for_cleanup}")
+                        
+                        mcp_config = {
+                            "mcpServers": {
+                                "semantic-code-search": {
+                                    "command": "bash",
+                                    "args": [str(wrapper_path)],
+                                    "env": {
+                                        "WORKSPACE_PATH": str(working_dir),
+                                        "RAY_ADDRESS": os.environ.get("RAY_ADDRESS", "auto"),
+                                        "PYTHONPATH": str(base_path),
+                                    }
+                                }
+                            }
+                        }
+                        
+                        print(f"[Episode {instance_id}] MCP config created: {mcp_config}")
+                        
+                        agent_context = AgentContext(skills=[skill])
+                        print(f"[Episode {instance_id}] Agent context created with semantic search skill")
+                        
+                        # Mark that we'll create an index (if doesn't exist)
+                        if not index_path_for_cleanup.exists():
+                            created_index = True
+                            print(f"[Episode {instance_id}] Will create new index (marked for cleanup)")
+                        else:
+                            print(f"[Episode {instance_id}] Index already exists (will not cleanup)")
+                            
+                        print(f"[Episode {instance_id}] ✓ Semantic search fully configured")
+                        
+            except Exception as e:
+                print(f"[Episode {instance_id}] ERROR setting up semantic search: {e}")
+                traceback.print_exc()
+                use_semantic_search = False
+                mcp_config = None
+                agent_context = None
+
+        # Import and register tools
+        for tool_name in generator_cfg.tools:
+            # Import OpenHands tools to trigger their registration
+            if tool_name in DEFAULT_OPENHANDS_TOOLS:
+                import_openhands_tool(tool_name)
+            # Register custom tools from our registry
+            elif tool_name in TOOL_REGISTRY:
+                register_tool(tool_name, TOOL_REGISTRY[tool_name])
+            else:
+                raise ValueError(f"Tool {tool_name} does not exist in the registry or default OpenHands tools")
+
+        tools = [Tool(name=tool_name) for tool_name in generator_cfg.tools]
+
+        # Get prompt paths from config (path-independent)
+        prompts_base_dir = os.path.join(os.path.dirname(__file__), "..", "prompts")
+        system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
+        user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
+
+        # Create agent with optional semantic search
+        agent_kwargs = {
+            "llm": LLM(
+                usage_id="agent",
+                model=litellm_model_name,
+                base_url=litellm_base_url,
+                api_key="sk-xxx",
+                temperature=temperature,
+                litellm_extra_body={
+                    "return_token_ids": True,
+                    "include_stop_str_in_output": True,
+                }
+            ),
+            "tools": tools,
+            "security_analyzer": None,
+            "system_prompt_filename": system_prompt_path
+        }
+        
+        if use_semantic_search and mcp_config is not None and agent_context is not None:
+            agent_kwargs["agent_context"] = agent_context
+            agent_kwargs["mcp_config"] = mcp_config
+            print(f"[Episode {instance_id}] Agent will be created WITH semantic search")
+        else:
+            print(f"[Episode {instance_id}] Agent will be created WITHOUT semantic search")
+        
+        agent = CustomAgent(**agent_kwargs)
+        print(f"[Episode {instance_id}] Agent created successfully")
+
+        conversation = Conversation(
+            agent=agent,
+            max_iteration_per_run=10,
+            visualizer=None,
+            workspace=str(working_dir),
+        )
+        
+        input_message = get_instruction(instance, user_prompt_path, str(working_dir))
+        
+        # Truncate input if too long
+        from transformers import AutoTokenizer
+        MAX_INPUT_TOKENS = 12000
+        try:
+            tokenizer = AutoTokenizer.from_pretrained(
+                litellm_model_name.replace("litellm_proxy/", ""),
+                trust_remote_code=True,
+                cache_dir="/data/user_data/sanidhyv/.cache/huggingface"
+            )
+            input_tokens = tokenizer.encode(input_message)
+            
+            if len(input_tokens) > MAX_INPUT_TOKENS:
+                print(f"[Episode {instance_id}] Input too long ({len(input_tokens)} tokens), truncating")
+                input_tokens = input_tokens[:500] + input_tokens[-(MAX_INPUT_TOKENS-500):]
+                input_message = tokenizer.decode(input_tokens, skip_special_tokens=True)
+        except Exception as e:
+            print(f"[Episode {instance_id}] Could not check input length: {e}")
+        
+        conversation.send_message(input_message)
+        print(f"[Episode {instance_id}] Starting conversation...")
+        logger.info("Conversation Starting")
+
+        # Capture start time
+        start_time = time.time()
+        start_timestamp = datetime.now().isoformat()
+
+        conversation.run()
+
+        messages = list(map(lambda event: event.model_dump(), conversation.state.events))
+        final_message = get_agent_final_response(conversation.state.events)
+
+        conversation.close()
+        logger.info("Conversation Finished")
+        print(f"[Episode {instance_id}] Conversation finished")
+
+        # Capture end time
+        end_time = time.time()
+        end_timestamp = datetime.now().isoformat()
+        wall_clock_duration = end_time - start_time
+
+        additional_attr = {
+            "wall_clock_duration": wall_clock_duration,
+            "start_timestamp": start_timestamp,
+            "end_timestamp": end_timestamp,
+        }
+
+        return messages, final_message, additional_attr, use_semantic_search
+
     except Exception as e:
-        logger.error(f"Error removing workspace {str(workspace)}: {e}", exc_info=True)
+        print(f"[Episode {instance_id}] ERROR in init_and_run: {e}")
+        traceback.print_exc()
+        raise
+        
+    finally:
+        # Cleanup workspace and index
+        print(f"[Worker {worker_id}] Cleaning up episode {instance_id}")
+        
+        # 1. Clean up workspace (repo clone)
+        if created_workspace:
+            try:
+                shutil.rmtree(workspace, ignore_errors=True)
+                print(f"[Worker {worker_id}] Removed workspace: {workspace}")
+            except Exception as e:
+                print(f"[Worker {worker_id}] Warning: Could not remove workspace: {e}")
+        
+        # 2. Clean up semantic search index (if we created it)
+        if created_index and index_path_for_cleanup and index_path_for_cleanup.exists():
+            try:
+                shutil.rmtree(index_path_for_cleanup, ignore_errors=True)
+                print(f"[Worker {worker_id}] Removed index: {index_path_for_cleanup}")
+            except Exception as e:
+                print(f"[Worker {worker_id}] Warning: Could not remove index: {e}")
 
-
-    conversation.close()
-    logger.info("Conversation Finished")
-
-    # Capture end time
-    end_time = time.time()
-    end_timestamp = datetime.now().isoformat()
-    wall_clock_duration = end_time - start_time
-
-    additional_attr = {
-        "wall_clock_duration": wall_clock_duration,
-        "start_timestamp": start_timestamp,
-        "end_timestamp": end_timestamp
-    }
-
-    return messages, final_message, additional_attr
-
-
+                
 class CodeSearchGenerator(SkyRLGymGenerator):
     def __init__(
         self,
         generator_cfg: DictConfig,
+        semantic_search_cfg: DictConfig,
         skyrl_gym_cfg: DictConfig,
         inference_engine_client: InferenceEngineClient,
         tokenizer,
@@ -209,15 +364,17 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.base_url = f"http://{self.http_endpoint_host}:{self.http_endpoint_port}/v1/"
         logger.info(f"Using CodeSearchGenerator with model {model_name} at {self.base_url}")
         self.generator_cfg = generator_cfg
+        self.semantic_search_cfg = semantic_search_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        # self.litellm_model_name = "openai/" + self.model_name
         self.litellm_model_name = "litellm_proxy/" + self.model_name
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError(
                 "OpenhandsGenerator doesn't support custom chat template"
             )
+            
+        print(f"CodeSearchGenerator initialized with semantic_search enabled: {self.semantic_search_cfg.get('enabled', False)}")
 
     async def code_search_loop(
         self,
@@ -229,18 +386,15 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
     ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]]:
-        # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
-        # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
         instance = env_extras
         error = None
         try:
-            messages, final_message, additional_attr = await init_and_run.remote(
+            messages, final_message, additional_attr, used_semantic_search = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
-                # sweagent_config,
                 self.base_url,
                 self.generator_cfg,
-                # env_extras["data_source"],
+                self.semantic_search_cfg,
                 "swe-gym",
                 sampling_params,
                 trajectory_id,
@@ -249,21 +403,15 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             )
         except Exception as e:
             logger.error(f"Error in starting conversation: {e}", exc_info=True)
-            # TODO properly handle this
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
-                "end_timestamp": None
+                "end_timestamp": None,
             }
-
-        # print("=" * 100)
-        # print("Conversation finished. Got the following LLM messages:")
-        # for i, message in enumerate(messages):
-        #     print(f"Message {i}: {str(message)[:100]}")
-        # print("Final message:", final_message)
+            used_semantic_search = False
 
         # Reward Manager
         reward = 0
@@ -282,7 +430,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 input_args = {
                     **input_args, 
                     **reward_fn_args.get("args", {})
-                    }
+                }
 
                 reward_outputs = reward_fn(**input_args)
                 if isinstance(reward_outputs, tuple):
@@ -308,16 +456,20 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         logger.info(f"Reward details: {reward_dict}, Total reward: {reward}")
 
         # Compute Trajectory Metrics
+        efficiency_keys = {'wall_clock_duration', 'start_timestamp', 'end_timestamp'}
+        efficiency_attr = {k: v for k, v in additional_attr.items() if k in efficiency_keys}
+        
         efficiency_metrics = compute_all_efficiency_metrics(
             messages=messages,
-            **additional_attr,
+            **efficiency_attr,
         )
 
         trajectory_metrics = compute_trajectory_metrics(messages)
 
         metrics_dict = {
             **efficiency_metrics,
-            **trajectory_metrics
+            **trajectory_metrics,
+            "used_semantic_search": used_semantic_search,
         }
 
         print(f"Trajectory metrics: {metrics_dict}")
@@ -341,13 +493,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         trajectory_metrics
                     )
                 )
-
         else:
             response_ids = [151643]
             stop_reason = "error"
             loss_mask = [1]
             initial_input_ids = [151643]
-            trajectory_metrics = {}  # Empty metrics for error case
+            trajectory_metrics = {}
             rollout_list.append(
                 (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
             )
@@ -357,6 +508,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             self.generator_cfg.traj_dir += "/"
 
         path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
+        
         # Check if traj_dir is a gcs path
         if path.startswith("gs://"):
             use_gcs = True
@@ -364,7 +516,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         else:
             use_gcs = False
             fs = fsspec.filesystem("file")
-            # Pre-create directory to avoid race conditions with parallel workers
             os.makedirs(path, exist_ok=True)
         
         instance_id = env_extras["instance_id"]
@@ -384,7 +535,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             if use_gcs == False:
                 os.makedirs(os.path.dirname(filename_path), exist_ok=True)
 
-            # get everything between ```` with regex
             raw_final_message = final_message
             matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
             parsed_final_message = matches[0] if matches else final_message
@@ -402,20 +552,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
             print(f"Saving trajectory to {filename_path}")
             with fs.open(filename_path, "w", auto_mkdir=True) as f:
-                json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
+                json.dump(result_dict, f, indent=2)
 
         return [rollout_list, reward_dict, metrics_dict]
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
-        """
-        Generate trajectories for the input batch.
-
-        Returns outputs in the same order as the input batch.
-        Args:
-            input_batch: GeneratorInput
-        Returns:
-            GeneratorOutput
-        """
+        """Generate trajectories for the input batch."""
         prompts = input_batch["prompts"]
         env_extras = input_batch["env_extras"]
         trajectory_ids = input_batch["trajectory_ids"]
@@ -429,15 +571,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         task_rollouts = []
         for i in range(len(prompts)):
             rollout = self.code_search_loop(
-                    prompts[i],
-                    env_extras[i],
-                    max_tokens=max_tokens,
-                    max_input_length=max_input_length,
-                    sampling_params=sampling_params,
-                    trajectory_id=trajectory_ids[i],
-                    batch_metadata=batch_metadata,
-                )
-            
+                prompts[i],
+                env_extras[i],
+                max_tokens=max_tokens,
+                max_input_length=max_input_length,
+                sampling_params=sampling_params,
+                trajectory_id=trajectory_ids[i],
+                batch_metadata=batch_metadata,
+            )
             task_rollouts.append(rollout)
 
         collected_task_rollouts = await asyncio.gather(*task_rollouts)
@@ -459,13 +600,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             for step_id in range(len(step_outputs)):
                 out_trajectory_id = copy.deepcopy(trajectory_ids[i])
                 out_trajectory_id.step = step_id
-                out_trajectory_ids.append(out_trajectory_id.instance_id)
+                out_trajectory_ids.append(out_trajectory_id)
                 is_last_step.append(step_id == len(step_outputs) - 1)
 
         if not len(responses):
             raise ValueError(
-                "Found no valid responses for this step. This means that generation failed for all trajectories, likely due to errors in environment setup."
+                "Found no valid responses for this step. This means that generation failed for all trajectories."
             )
+        
         rollout_metrics = get_rollout_metrics(responses, rewards)
 
         tracked_metrics = {}
@@ -476,7 +618,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         ):
             for tracker_dict_item in tracker_dict:
                 for k, v in tracker_dict_item.items():
-                    # Check if v is numeric
                     if not isinstance(v, (int, float)):
                         continue
                     if f"{tracker_name}/{k}" not in tracked_metrics:

@@ -1,0 +1,280 @@
+#!/bin/bash
+#SBATCH --partition=preempt
+#SBATCH --mem=300Gb
+#SBATCH --cpus-per-task=30
+#SBATCH --gres=gpu:8
+#SBATCH -t 2-00:00:00
+#SBATCH --job-name=rl_qwen3_8b_batched
+#SBATCH --error=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.err
+#SBATCH --output=/data/user_data/sanidhyv/agentic-code-search-oss/logs/%x__%j.out
+#SBATCH --nodes=1
+#SBATCH --ntasks-per-node=1
+
+# ============================================================================
+# Batched Training Script with Memory-Optimized Indexing
+# ============================================================================
+# This script trains in batches:
+# 1. Index N repos (e.g., 15)
+# 2. Train on those repos
+# 3. Clean up indices
+# 4. Move to next batch
+# ============================================================================
+
+# Use a dedicated directory for tmux instead of /tmp
+export TMUX_TMPDIR="/data/user_data/sanidhyv/ray_temp_grep/tmux_sessions"
+mkdir -p "$TMUX_TMPDIR"
+
+# Clean up old tmux sessions and directories
+echo "Cleaning up old tmux sessions..."
+tmux ls 2>/dev/null | grep -v attached | cut -d: -f1 | xargs -I {} tmux kill-session -t {} 2>/dev/null || true
+find "$TMUX_TMPDIR" -type d -name 'tmux-*' -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+
+# Clean up old testbed directories (older than 1 day)
+echo "Cleaning up old testbed directories..."
+find /data/user_data/sanidhyv/tmp -maxdepth 1 -type d -name 'testbed_*' -mtime +1 -exec rm -rf {} + 2>/dev/null || true
+
+# Check disk usage
+echo "Disk usage:"
+df -h /tmp
+df -h /data/user_data/sanidhyv/tmp
+
+# Kill any zombie processes
+pkill -9 -u $(whoami) tmux 2>/dev/null || true
+
+# Cache Configuration
+export UV_CACHE_DIR="/data/user_data/sanidhyv/.cache/uv"
+export HF_HOME="/data/user_data/sanidhyv/.cache/huggingface"
+export TRANSFORMERS_CACHE="/data/user_data/sanidhyv/.cache/transformers"
+export TORCH_HOME="/data/user_data/sanidhyv/.cache/torch"
+export XDG_CACHE_HOME="/data/user_data/sanidhyv/.cache"
+export TMPDIR="/data/user_data/sanidhyv/tmp"
+export RAY_TMPDIR="/data/user_data/sanidhyv/ray_temp_grep"
+
+mkdir -p "$UV_CACHE_DIR" "$HF_HOME" "$TRANSFORMERS_CACHE" "$TORCH_HOME" "$TMPDIR" "$RAY_TMPDIR"
+
+# NCCL Configuration
+NETWORK_INTERFACE=$(ip route | grep default | awk '{print $5}' | head -n1)
+export NCCL_SOCKET_IFNAME=$NETWORK_INTERFACE
+export NCCL_IB_DISABLE=1
+export NCCL_P2P_DISABLE=0
+export NCCL_DEBUG=INFO
+export NCCL_TIMEOUT=1800
+export NCCL_ASYNC_ERROR_HANDLING=1
+export MASTER_ADDR=localhost
+export MASTER_PORT=29500
+export CODE_SEARCH_BASE_PATH="/data/user_data/sanidhyv/agentic-code-search-oss"
+
+# Environment
+export CUDA_VISIBLE_DEVICES=0,1,2,3,4,5,6,7
+export TOKENIZERS_PARALLELISM=false
+export TORCH_DISTRIBUTED_DEBUG=OFF
+export VLLM_FLASH_ATTN_VERSION=2
+export CUDA_LAUNCH_BLOCKING=1
+export TORCH_USE_CUDA_DSA=1
+
+export PYTORCH_CUDA_ALLOC_CONF=expandable_segments:True  # ← CRITICAL for fragmentation
+
+
+# Load .env if exists
+[ -f .env ] && . .env
+
+# ============================================================================
+# Configuration
+# ============================================================================
+MODEL="Qwen/Qwen3-8B"
+MODEL_ALIAS=$(echo $MODEL | sed 's/\//-/g')
+DATA_PATH="${DATA_PATH:-data/SWE-Gym__SWE-Gym_train}"
+CKPT_PATH="/data/user_data/sanidhyv/agentic-code-search-oss/ckpts/code_search_${MODEL_ALIAS}_batched"
+CACHE_DIR="/data/user_data/sanidhyv/tmp/embedding_cache"
+
+# Batched indexing configuration
+BATCH_SIZE=15  # Number of repos per batch
+REPOS_DIR="/data/user_data/sanidhyv/grep"  # Where repos are cloned
+
+# ✅ UPDATED: Training configuration for 8B model (memory optimized)
+N_ROLLOUTS="${N_ROLLOUTS:-2}"  # Keep generation the same
+TRAIN_BATCH_SIZE=4  # ← REDUCED from 4 for 8B model
+MAX_LENGTH=1024  # ← REDUCED from 2048 to save training memory
+MAX_PROMPT_LENGTH=2048  # ← REDUCED from 4096
+
+export WANDB_PROJECT="code_search_8b_15"
+
+# Resource allocation
+NUM_GPUS=8
+NNODES=1
+HALF_NUM_GPUS=$((NUM_GPUS / 2))
+NUM_INFERENCE_ENGINES=2  # Half for inference
+NUM_TRAINING_ENGINES=4   # Half for training
+TP_SIZE=2
+LOGGER=wandb
+RUN_NAME="code_search_${MODEL_ALIAS}_batched_b${BATCH_SIZE}"
+
+mkdir -p $CKPT_PATH $CKPT_PATH/trajectories logs $CACHE_DIR
+export RAY_object_store_memory=$((50 * 1024 * 1024 * 1024))  # 50GB
+export RAY_memory_monitor_refresh_ms=0  
+export RAY_object_spilling_config='{"type":"filesystem","params":{"directory_path":"/data/user_data/sanidhyv/ray_spill"}}'
+export HYDRA_FULL_ERROR=1
+MAX_RESTART_ATTEMPTS=10
+RESTART_DELAY=300
+mkdir -p /data/user_data/sanidhyv/ray_spill
+
+# ============================================================================
+# Training Loop with Auto-Restart
+# ============================================================================
+echo "=================================================="
+echo "Starting Batched Training with Auto-Restart"
+echo "=================================================="
+echo "Model: $MODEL (8B - Memory Optimized)"
+echo "Training Batch Size: $TRAIN_BATCH_SIZE (reduced for 8B)"
+echo "Max Length: $MAX_LENGTH (reduced for 8B)"
+echo "Max Prompt Length: $MAX_PROMPT_LENGTH (reduced for 8B)"
+echo "Max restart attempts: $MAX_RESTART_ATTEMPTS"
+echo "=================================================="
+
+# Cleanup function
+cleanup() {
+    echo "[Cleanup] Shutting down Ray..."
+    python3 -c "import ray; ray.shutdown() if ray.is_initialized() else None" 2>/dev/null
+    echo "[Cleanup] Cleaning temporary files..."
+    rm -rf "$TMPDIR"/* 2>/dev/null || true
+}
+trap cleanup EXIT INT TERM
+
+# Main training loop with restart
+for attempt in $(seq 1 $MAX_RESTART_ATTEMPTS); do
+    echo ""
+    echo "=================================================="
+    echo "[Attempt $attempt/$MAX_RESTART_ATTEMPTS] Starting training..."
+    echo "=================================================="
+    
+    set -x
+    
+    # Launch training with 8B optimizations
+    CUDA_LAUNCH_BLOCKING=1 uv run python src/train_batched.py \
+      --config-name=ppo_base_config \
+      +run_async_trainer=true \
+      +batched_indexing.enabled=true \
+      +batched_indexing.batch_size=$BATCH_SIZE \
+      +batched_indexing.cache_dir=$CACHE_DIR \
+      +batched_indexing.repos_dir=$REPOS_DIR \
+      data.train_data=["$DATA_PATH/train.parquet"] \
+      data.val_data=["$DATA_PATH/validation.parquet"] \
+      trainer.algorithm.advantage_estimator=grpo \
+      trainer.policy.model.path=$MODEL \
+      trainer.placement.colocate_all=false \
+      trainer.placement.colocate_policy_ref=true \
+      trainer.strategy=fsdp2 \
+      trainer.policy.fsdp_config.cpu_offload=true \
+      trainer.policy.fsdp_config.reshard_after_forward=true \
+      trainer.policy.fsdp_config.fsdp_size=-1 \
+      +trainer.policy.fsdp_config.activation_checkpointing=true \
+      trainer.fully_async.num_parallel_generation_workers=4 \
+      trainer.placement.policy_num_gpus_per_node=$NUM_TRAINING_ENGINES \
+      trainer.placement.ref_num_gpus_per_node=$NUM_TRAINING_ENGINES \
+      trainer.placement.policy_num_nodes=$NNODES \
+      trainer.placement.ref_num_nodes=$NNODES \
+      trainer.policy.sequence_parallel_size=1 \
+      generator.num_inference_engines=$NUM_INFERENCE_ENGINES \
+      generator.inference_engine_tensor_parallel_size=$TP_SIZE \
+      +generator.traj_dir=$CKPT_PATH/trajectories/ \
+      +generator.engine_init_kwargs.enable_auto_tool_choice=true \
+      +generator.engine_init_kwargs.tool_call_parser=hermes \
+      +generator.engine_init_kwargs.reasoning_parser=qwen3 \
+      +generator.engine_init_kwargs.max_model_len=10240 \
+      trainer.epochs=1 \
+      trainer.eval_batch_size=100 \
+      trainer.eval_before_train=false \
+      trainer.eval_interval=-1 \
+      trainer.update_epochs_per_batch=1 \
+      trainer.train_batch_size=$TRAIN_BATCH_SIZE \
+      trainer.policy_mini_batch_size=$TRAIN_BATCH_SIZE \
+      trainer.micro_forward_batch_size_per_gpu=1 \
+      trainer.micro_train_batch_size_per_gpu=1 \
+      trainer.dump_data_batch=true \
+      trainer.export_path="$CKPT_PATH/exported_model/" \
+      trainer.hf_save_interval=-1 \
+      trainer.ckpt_interval=100 \
+      trainer.max_prompt_length=$MAX_PROMPT_LENGTH \
+      generator.sampling_params.max_generate_length=$MAX_LENGTH \
+      generator.sampling_params.temperature=1.0 \
+      generator.max_input_length=8000 \
+      generator.max_num_batched_tokens=16000 \
+      generator.max_turns=20 \
+      trainer.policy.optimizer_config.lr=1.0e-6 \
+      trainer.algorithm.use_kl_loss=False \
+      generator.backend=vllm \
+      generator.run_engines_locally=True \
+      generator.enable_http_endpoint=True \
+      generator.http_endpoint_host=0.0.0.0 \
+      generator.http_endpoint_port=8080 \
+      generator.weight_sync_backend=nccl \
+      generator.async_engine=true \
+      generator.batched=false \
+      generator.n_samples_per_prompt=$N_ROLLOUTS \
+      generator.gpu_memory_utilization=0.55 \
+      generator.enforce_eager=true \
+      trainer.step_wise_training=true \
+      trainer.logger=$LOGGER \
+      trainer.project_name=$WANDB_PROJECT \
+      trainer.run_name=$RUN_NAME \
+      trainer.resume_mode=latest \
+      trainer.ckpt_path=$CKPT_PATH \
+      trainer.max_ckpts_to_keep=3 \
+      +semantic_search.enabled=true \
+      +semantic_search.device=cpu \
+      +semantic_search.embedding_model="jinaai/jina-code-embeddings-0.5b" \
+      +semantic_search.reranker_model=null \
+      +semantic_search.max_indices=15
+    
+    exit_code=$?
+    set +x
+    
+    echo ""
+    echo "=================================================="
+    echo "[Attempt $attempt] Training exited with code: $exit_code"
+    echo "=================================================="
+    
+    # Check if training completed successfully
+    if [ $exit_code -eq 0 ]; then
+        echo "✓ Training completed successfully!"
+        break
+    fi
+    
+    # Check if all batches are complete (alternative success check)
+    if [ -f "$CKPT_PATH/batch_state.json" ]; then
+        if grep -q '"progress_percent": 100' "$CKPT_PATH/batch_state.json" 2>/dev/null; then
+            echo "✓ All batches complete (verified from batch_state.json)"
+            break
+        fi
+    fi
+    
+    # Training failed, prepare to restart
+    if [ $attempt -lt $MAX_RESTART_ATTEMPTS ]; then
+        echo "⚠️  Training failed, will restart in ${RESTART_DELAY}s..."
+        echo "   Cleaning up Ray and temp files..."
+        
+        # Cleanup before restart
+        cleanup
+        
+        # Wait before restart
+        sleep $RESTART_DELAY
+        
+        echo "   Restarting training..."
+    else
+        echo "✗ Reached maximum restart attempts ($MAX_RESTART_ATTEMPTS)"
+        echo "   Please investigate manually"
+        exit 1
+    fi
+done
+
+# ============================================================================
+# Final Cleanup
+# ============================================================================
+echo "=================================================="
+echo "Training Complete - Final Cleanup"
+echo "=================================================="
+
+find /data/user_data/sanidhyv/tmp -maxdepth 1 -type d -name "testbed_*" -mtime +1 -exec rm -rf {} + 2>/dev/null
+echo "Cleanup complete!"
+
+exit 0

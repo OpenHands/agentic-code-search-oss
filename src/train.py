@@ -14,8 +14,16 @@ from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOT
 
 class CodeSearchPPOExp(BasePPOExp):
     def get_generator(self, cfg, tokenizer, inference_engine_client):
+        semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({
+            'enabled': True,
+            'embedding_model': 'jinaai/jina-code-embeddings-0.5b',
+            'reranker_model': None,
+            'device': 'cuda',
+            'max_indices': 50
+        }))
         generator = CodeSearchGenerator(
             generator_cfg=cfg.generator,
+            semantic_search_cfg=semantic_search_cfg,
             skyrl_gym_cfg=OmegaConf.create({"max_env_workers": 0}),
             inference_engine_client=inference_engine_client,
             tokenizer=tokenizer,
@@ -89,7 +97,6 @@ def main(cfg: DictConfig) -> None:
             cfg.generator.tools = [
                 "terminal",
             ]
-
     # Check if the tool exists in the registry
     for tool in cfg.generator.tools:
         if not tool_exists(tool):
@@ -102,10 +109,59 @@ def main(cfg: DictConfig) -> None:
                 "system_prompt": "templates/system_prompt.j2",
                 "user_prompt": "templates/file_module_parallel_tools.j2"
             }
+    semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({'enabled': False}))
     
-    initialize_ray(cfg)
-    ray.get(skyrl_entrypoint.remote(cfg))
+    if semantic_search_cfg.enabled:
+        print("Initializing Semantic Search")
+        # Check if indices are pre-computed
+        from pathlib import Path
+        cache_dir = Path("/data/user_data/sanidhyv/.cache") / "swebench_indices"
+        if not cache_dir.exists() or len(list(cache_dir.iterdir())) == 0:
+            print("⚠️  WARNING: No pre-computed indices found!")
+            print("   Run pre-indexing first: python preindex_swebench.py")
+        else:
+            num_indices = len(list(cache_dir.iterdir()))
+            print(f"Found {num_indices} pre-computed indices in {cache_dir}")
 
+        # Initialize shared embedding service
+        from src.services.embedding_service import get_embedding_service
+        
+        device = semantic_search_cfg.device
+        max_indices = semantic_search_cfg.max_indices
+
+        print(f"\nInitializing embedding service:")
+        print(f"  - Device: {device}")
+        print(f"  - Embedding model: {semantic_search_cfg.embedding_model}")
+        print(f"  - Reranker model: {semantic_search_cfg.reranker_model}")
+        print(f"  - LRU cache: max {max_indices} indices")
+       
+        embedding_service = get_embedding_service(
+            device=device,
+            max_indices=max_indices,
+        )
+
+        stats = ray.get(embedding_service.get_cache_stats.remote())
+        print(f"Embedding service ready!")
+        print(f"  - Cache: {stats['loaded_indices']}/{stats['max_indices']} indices loaded")
+    if ray.is_initialized():
+        ray.shutdown()
+    from skyrl_train.utils import prepare_runtime_environment
+    from skyrl_train.utils.ppo_utils import sync_registries
+    import os
+
+    # Prepare environment variables
+    env_vars = prepare_runtime_environment(cfg)
+
+    # Initialize Ray with packages installed via pip
+    ray.init(
+        runtime_env={
+            "env_vars": env_vars
+        }
+    )
+
+    # Sync registries
+    sync_registries()
+    ray.get(skyrl_entrypoint.remote(cfg))
 
 if __name__ == "__main__":
     main()
