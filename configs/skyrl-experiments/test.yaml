@@ -1,0 +1,13 @@
+name: "read_only_tools"
+description: "The agent only has access to read only tools"
+
+reward:
+  - fn: tool_use_reward
+  - fn: turn_efficiency
+
+tools:
+  - bash_and_grep_toolset
+
+prompts:
+  system_prompt: "templates/system_prompt.j2"
+  user_prompt: "templates/file_localization.j2"

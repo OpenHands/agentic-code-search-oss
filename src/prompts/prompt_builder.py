@@ -22,10 +22,9 @@ def get_instruction(
     # Prepare context for rendering
     context = {
         "instance": instance,
-        "workspace_dir_name": workspace_dir_name,
-        "actual_workspace_path": workspace_path,
+        "working_dir": workspace_path,
     }
-    context["test_instructions"] = ""
+    # context["test_instructions"] = ""
 
     # Render the instruction
     instruction = template.render(context)

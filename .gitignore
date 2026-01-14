@@ -4,8 +4,8 @@
 # Custom
 swebench_repos/
 uv.lock
-agent-sdk/
 outputs/
+ckpts/
 
 ### Python ###
 # Byte-compiled / optimized / DLL files

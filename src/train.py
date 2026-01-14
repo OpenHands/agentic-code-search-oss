@@ -6,6 +6,7 @@ import ray
 
 import asyncio
 
+from src.tools import tool_exists
 from src.generator.code_search_generator import CodeSearchGenerator
 from src.async_trainer import CustomFullyAsyncRayPPOTrainer as FullyAsyncRayPPOTrainer
 # from skyrl_train.fully_async_trainer import FullyAsyncRayPPOTrainer
@@ -76,23 +77,42 @@ def main(cfg: DictConfig) -> None:
     # validate the arguments
     validate_cfg(cfg)
 
-    # Check cfg.generator.reward if it exists or not
-    if hasattr(cfg.generator, "reward"):
+    # check cfg.generator.exp_config if it exists or not
+    if hasattr(cfg.generator, "exp_config"):
         # Open yaml file and print its contents
-        with open(cfg.generator.reward, "r") as f:
-            reward_cfg = OmegaConf.load(f)
-        cfg.generator.reward = reward_cfg.reward
+        with open(cfg.generator.exp_config, "r") as f:
+            exp_cfg = OmegaConf.load(f)
+
+        with open_dict(cfg):
+            cfg.generator.reward = exp_cfg.reward
+            cfg.generator.tools = exp_cfg.tools
+            # Parse prompts if they exist in the exp config
+            if hasattr(exp_cfg, "prompts"):
+                cfg.generator.prompts = exp_cfg.prompts
     else:
         with open_dict(cfg):
             cfg.generator.reward = [
                 {"fn": "multilevel_localization_f1_reward"},
             ]
-
+            cfg.generator.tools = [
+                "terminal",
+            ]
+    # Check if the tool exists in the registry
+    for tool in cfg.generator.tools:
+        if not tool_exists(tool):
+            raise ValueError(f"Tool {tool} does not exist in the registry")
+    
+    # Set default prompts if not specified
+    if not hasattr(cfg.generator, "prompts"):
+        with open_dict(cfg):
+            cfg.generator.prompts = {
+                "system_prompt": "templates/system_prompt.j2",
+                "user_prompt": "templates/file_module_parallel_tools.j2"
+            }
     semantic_search_cfg = cfg.get('semantic_search', OmegaConf.create({'enabled': False}))
     
     if semantic_search_cfg.enabled:
         print("Initializing Semantic Search")
-
         # Check if indices are pre-computed
         from pathlib import Path
         cache_dir = Path("/data/user_data/sanidhyv/.cache") / "swebench_indices"

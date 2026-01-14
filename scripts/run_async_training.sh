@@ -26,7 +26,7 @@ RUN_NAME="code_search_${MODEL_ALIAS}"
 set -x
 
 DATA_PATH="${DATA_PATH:-data/swe_smith}"
-CKPT_PATH="${CKPT_PATH:-ckpts/${MODEL_ALIAS}}"
+CKPT_PATH="${CKPT_PATH:-$(pwd)/ckpts/${MODEL_ALIAS}}"
 mkdir -p $CKPT_PATH
 
 HALF_NUM_GPUS=$((NUM_GPUS / 2))

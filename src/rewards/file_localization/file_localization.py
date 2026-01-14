@@ -1,6 +1,15 @@
 from typing import Set, List, Dict
 from src.rewards import reward
 
+def compute_file_f1_score(predicted_files, true_files):
+    pred, true = set(predicted_files), set(true_files)
+    if not true:
+        return 0.0 # return 0 reward if ground truth is empty
+    tp = len(pred & true)
+    precision = tp / len(pred) if pred else 0.0
+    recall = tp / len(true) if true else 0.0
+
+    return 0.0 if precision + recall == 0 else 2 * precision * recall / (precision + recall)
 
 def extract_ground_truth_from_file_changes(file_changes: list) -> dict:
     """

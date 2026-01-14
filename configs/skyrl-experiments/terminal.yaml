@@ -1,0 +1,13 @@
+name: "terminal_tool_only"
+description: "The agent only has access to the terminal tool"
+
+reward:
+  - fn: tool_use_reward
+  - fn: turn_efficiency
+
+tools:
+  - terminal
+
+prompts:
+  system_prompt: "templates/system_prompt.j2"
+  user_prompt: "templates/file_localization.j2"

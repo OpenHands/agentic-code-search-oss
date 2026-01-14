@@ -46,7 +46,7 @@ from openhands.workspace import DockerWorkspace
 from openhands.tools.preset.default import get_default_tools
 from openhands.tools.preset.planning import get_planning_tools
 from openhands.tools.terminal import TerminalTool
-from openhands.sdk.tool import Tool
+from openhands.sdk.tool import Tool, register_tool
 from openhands.sdk import (
     Agent,
     LLM,
@@ -62,6 +62,7 @@ from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
+from src.tools import TOOL_REGISTRY, DEFAULT_OPENHANDS_TOOLS, import_openhands_tool
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
@@ -70,7 +71,6 @@ import logging
 import signal
 
 logger = get_logger(__name__)
-# logger.setLevel(logging.WARNING)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
@@ -108,6 +108,7 @@ def init_and_run(
 
     if not ready_file.exists():
         print(f"[Episode {instance_id}] ❌ HASH MISMATCH - this instance should not be in training batch!")
+    
     worker_id = os.getpid()
     workspace = Path(f"/data/user_data/sanidhyv/tmp/testbed_{worker_id}/")
     workspace.mkdir(parents=True, exist_ok=True)
@@ -115,7 +116,7 @@ def init_and_run(
     # Track what we created for cleanup
     created_workspace = False
     created_index = False
-    index_path = None
+    index_path_for_cleanup = None
     
     try:
         status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
@@ -170,11 +171,10 @@ def init_and_run(
                         print(f"[Episode {instance_id}] MCP wrapper found and made executable")
                         
                         # Track index location for cleanup
-                        from src.mcp_server.training_semantic_search_server import get_repo_commit_hash
                         repo_commit_hash = get_repo_commit_hash(repo_name, commit_id)
-                        index_path = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
+                        index_path_for_cleanup = Path(f"/data/user_data/sanidhyv/tmp/embedding_cache/{repo_commit_hash}")
                         
-                        print(f"[Episode {instance_id}] Index will be stored at: {index_path}")
+                        print(f"[Episode {instance_id}] Index will be stored at: {index_path_for_cleanup}")
                         
                         mcp_config = {
                             "mcpServers": {
@@ -195,8 +195,8 @@ def init_and_run(
                         agent_context = AgentContext(skills=[skill])
                         print(f"[Episode {instance_id}] Agent context created with semantic search skill")
                         
-                        # Mark that we'll create an index
-                        if not index_path.exists():
+                        # Mark that we'll create an index (if doesn't exist)
+                        if not index_path_for_cleanup.exists():
                             created_index = True
                             print(f"[Episode {instance_id}] Will create new index (marked for cleanup)")
                         else:
@@ -211,7 +211,25 @@ def init_and_run(
                 mcp_config = None
                 agent_context = None
 
-        # Agent creation - use CustomAgent with optional semantic search
+        # Import and register tools
+        for tool_name in generator_cfg.tools:
+            # Import OpenHands tools to trigger their registration
+            if tool_name in DEFAULT_OPENHANDS_TOOLS:
+                import_openhands_tool(tool_name)
+            # Register custom tools from our registry
+            elif tool_name in TOOL_REGISTRY:
+                register_tool(tool_name, TOOL_REGISTRY[tool_name])
+            else:
+                raise ValueError(f"Tool {tool_name} does not exist in the registry or default OpenHands tools")
+
+        tools = [Tool(name=tool_name) for tool_name in generator_cfg.tools]
+
+        # Get prompt paths from config (path-independent)
+        prompts_base_dir = os.path.join(os.path.dirname(__file__), "..", "prompts")
+        system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
+        user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
+
+        # Create agent with optional semantic search
         agent_kwargs = {
             "llm": LLM(
                 usage_id="agent",
@@ -224,19 +242,18 @@ def init_and_run(
                     "include_stop_str_in_output": True,
                 }
             ),
-            "tools": [Tool(name=TerminalTool.name)],
+            "tools": tools,
             "security_analyzer": None,
-            "system_prompt_filename": os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "system_prompt.j2")
+            "system_prompt_filename": system_prompt_path
         }
         
         if use_semantic_search and mcp_config is not None and agent_context is not None:
             agent_kwargs["agent_context"] = agent_context
             agent_kwargs["mcp_config"] = mcp_config
-            print(f"[Episode {instance_id}] Agent will be created WITH semantic search (mcp_config and agent_context)")
+            print(f"[Episode {instance_id}] Agent will be created WITH semantic search")
         else:
             print(f"[Episode {instance_id}] Agent will be created WITHOUT semantic search")
         
-        print(f"[Episode {instance_id}] Creating agent with kwargs keys: {list(agent_kwargs.keys())}")
         agent = CustomAgent(**agent_kwargs)
         print(f"[Episode {instance_id}] Agent created successfully")
 
@@ -246,9 +263,8 @@ def init_and_run(
             visualizer=None,
             workspace=str(working_dir),
         )
-                
-        prompt_path = os.path.join(os.path.dirname(__file__), "..", "prompts", "templates", "file_module.j2")
-        input_message = get_instruction(instance, prompt_path, str(working_dir))
+        
+        input_message = get_instruction(instance, user_prompt_path, str(working_dir))
         
         # Truncate input if too long
         from transformers import AutoTokenizer
@@ -316,14 +332,13 @@ def init_and_run(
                 print(f"[Worker {worker_id}] Warning: Could not remove workspace: {e}")
         
         # 2. Clean up semantic search index (if we created it)
-        if created_index and index_path and index_path.exists():
+        if created_index and index_path_for_cleanup and index_path_for_cleanup.exists():
             try:
-                shutil.rmtree(index_path, ignore_errors=True)
-                print(f"[Worker {worker_id}] Removed index: {index_path}")
+                shutil.rmtree(index_path_for_cleanup, ignore_errors=True)
+                print(f"[Worker {worker_id}] Removed index: {index_path_for_cleanup}")
             except Exception as e:
                 print(f"[Worker {worker_id}] Warning: Could not remove index: {e}")
-           
-    
+
                 
 class CodeSearchGenerator(SkyRLGymGenerator):
     def __init__(
@@ -352,7 +367,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.semantic_search_cfg = semantic_search_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        # self.litellm_model_name = "openai/" + self.model_name
         self.litellm_model_name = "litellm_proxy/" + self.model_name
 
         if self.generator_cfg.chat_template.name_or_path is not None:
@@ -372,12 +386,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
     ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]]:
-        # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
-        # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
         instance = env_extras
         error = None
         try:
-
             messages, final_message, additional_attr, used_semantic_search = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
@@ -392,7 +403,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             )
         except Exception as e:
             logger.error(f"Error in starting conversation: {e}", exc_info=True)
-            # TODO properly handle this
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
@@ -402,12 +412,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 "end_timestamp": None,
             }
             used_semantic_search = False
-
-        # print("=" * 100)
-        # print("Conversation finished. Got the following LLM messages:")
-        # for i, message in enumerate(messages):
-        #     print(f"Message {i}: {str(message)[:100]}")
-        # print("Final message:", final_message)
 
         # Reward Manager
         reward = 0
@@ -426,7 +430,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 input_args = {
                     **input_args, 
                     **reward_fn_args.get("args", {})
-                    }
+                }
 
                 reward_outputs = reward_fn(**input_args)
                 if isinstance(reward_outputs, tuple):
@@ -449,10 +453,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         if final_message == "":
             reward = -10.0
 
-        print(f"Reward details: {reward_dict}, Total reward: {reward}")
+        logger.info(f"Reward details: {reward_dict}, Total reward: {reward}")
 
         # Compute Trajectory Metrics
-        # Filter out non-efficiency keys before passing to compute_all_efficiency_metrics
         efficiency_keys = {'wall_clock_duration', 'start_timestamp', 'end_timestamp'}
         efficiency_attr = {k: v for k, v in additional_attr.items() if k in efficiency_keys}
         
@@ -473,13 +476,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
-        gamma = 0.9
-        num_steps = len(token_messages)
         if len(token_messages) > 0:
             for idx, message in enumerate(token_messages):
                 current_prompt_ids = message["prompt_token_ids"]
                 current_response_ids = message["response_token_ids"]
-                step_reward = reward * gamma**(num_steps - idx - 1)
+                step_reward = reward
 
                 rollout_list.append(
                     (
@@ -492,13 +493,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         trajectory_metrics
                     )
                 )
-
         else:
             response_ids = [151643]
             stop_reason = "error"
             loss_mask = [1]
             initial_input_ids = [151643]
-            trajectory_metrics = {}  # Empty metrics for error case
+            trajectory_metrics = {}
             rollout_list.append(
                 (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
             )
@@ -508,6 +508,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             self.generator_cfg.traj_dir += "/"
 
         path = self.generator_cfg.traj_dir + f"step_{batch_metadata.global_step}/{batch_metadata.training_phase}/"
+        
         # Check if traj_dir is a gcs path
         if path.startswith("gs://"):
             use_gcs = True
@@ -515,6 +516,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         else:
             use_gcs = False
             fs = fsspec.filesystem("file")
+            os.makedirs(path, exist_ok=True)
         
         instance_id = env_extras["instance_id"]
 
@@ -533,7 +535,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             if use_gcs == False:
                 os.makedirs(os.path.dirname(filename_path), exist_ok=True)
 
-            # get everything between ```` with regex
             raw_final_message = final_message
             matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
             parsed_final_message = matches[0] if matches else final_message
@@ -551,20 +552,12 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
             print(f"Saving trajectory to {filename_path}")
             with fs.open(filename_path, "w", auto_mkdir=True) as f:
-                json.dump(result_dict, f, indent=2) #, sort_keys=True, ensure_ascii=False)
+                json.dump(result_dict, f, indent=2)
 
         return [rollout_list, reward_dict, metrics_dict]
 
     async def generate(self, input_batch: GeneratorInput) -> GeneratorOutput:
-        """
-        Generate trajectories for the input batch.
-
-        Returns outputs in the same order as the input batch.
-        Args:
-            input_batch: GeneratorInput
-        Returns:
-            GeneratorOutput
-        """
+        """Generate trajectories for the input batch."""
         prompts = input_batch["prompts"]
         env_extras = input_batch["env_extras"]
         trajectory_ids = input_batch["trajectory_ids"]
@@ -578,15 +571,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         task_rollouts = []
         for i in range(len(prompts)):
             rollout = self.code_search_loop(
-                    prompts[i],
-                    env_extras[i],
-                    max_tokens=max_tokens,
-                    max_input_length=max_input_length,
-                    sampling_params=sampling_params,
-                    trajectory_id=trajectory_ids[i],
-                    batch_metadata=batch_metadata,
-                )
-            
+                prompts[i],
+                env_extras[i],
+                max_tokens=max_tokens,
+                max_input_length=max_input_length,
+                sampling_params=sampling_params,
+                trajectory_id=trajectory_ids[i],
+                batch_metadata=batch_metadata,
+            )
             task_rollouts.append(rollout)
 
         collected_task_rollouts = await asyncio.gather(*task_rollouts)
@@ -613,8 +605,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         if not len(responses):
             raise ValueError(
-                "Found no valid responses for this step. This means that generation failed for all trajectories, likely due to errors in environment setup."
+                "Found no valid responses for this step. This means that generation failed for all trajectories."
             )
+        
         rollout_metrics = get_rollout_metrics(responses, rewards)
 
         tracked_metrics = {}
@@ -625,7 +618,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         ):
             for tracker_dict_item in tracker_dict:
                 for k, v in tracker_dict_item.items():
-                    # Check if v is numeric
                     if not isinstance(v, (int, float)):
                         continue
                     if f"{tracker_name}/{k}" not in tracked_metrics:
