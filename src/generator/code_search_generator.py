@@ -200,13 +200,18 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             generator_cfg, skyrl_gym_cfg, inference_engine_client, tokenizer, model_name
         )
 
-        self.http_endpoint_host = generator_cfg.get(
-            "http_endpoint_host", "127.0.0.1"
-        )
+        # NOTE:
+        # `http_endpoint_host` is often set to "0.0.0.0" for *binding* the local server,
+        # but clients should not connect to 0.0.0.0. When we build the OpenAI-compatible
+        # base_url for LiteLLM/OpenHands, prefer a loopback address in that case.
+        self.http_endpoint_host = generator_cfg.get("http_endpoint_host", "127.0.0.1")
         self.http_endpoint_port = generator_cfg.get(
             "http_endpoint_port", 8000
         )
-        self.base_url = f"http://{self.http_endpoint_host}:{self.http_endpoint_port}/v1/"
+        request_host = self.http_endpoint_host
+        if request_host in {"0.0.0.0", "::"}:
+            request_host = "127.0.0.1"
+        self.base_url = f"http://{request_host}:{self.http_endpoint_port}/v1/"
         logger.info(f"Using CodeSearchGenerator with model {model_name} at {self.base_url}")
         self.generator_cfg = generator_cfg
         self.tokenizer = tokenizer
