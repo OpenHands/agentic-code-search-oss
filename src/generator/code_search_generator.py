@@ -93,7 +93,10 @@ def init_and_run(
     
     # Avoid collisions in /tmp testbed directories
     uuid_str = str(uuid.uuid4())[:8]
-    workspace = Path(f"/tmp/testbed/{uuid_str}/")
+    # Allow overriding testbed root to avoid filling local /tmp on constrained machines.
+    # Defaults to /tmp/testbed to preserve existing behavior.
+    workspace = Path(os.environ.get("TESTBED_ROOT", "/tmp/testbed")) / uuid_str
+    workspace.mkdir(parents=True, exist_ok=True)
     status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
 
     if training_phase == "eval":
@@ -123,6 +126,12 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
+    # Get max_input_length from config to prevent context overflow
+    max_input_length = generator_cfg.get("max_input_length", 38400)
+    # Reserve some tokens for system prompt, tools, and response generation
+    # Set max_input_tokens to ensure OpenHands handles context length properly
+    effective_max_input = max_input_length - 2000  # Reserve 2000 tokens for overhead
+
     agent = CustomAgent(
         llm=LLM(
             usage_id="agent",
@@ -130,6 +139,7 @@ def init_and_run(
             base_url=litellm_base_url,
             api_key="sk-xxx",
             temperature=temperature,
+            max_input_tokens=effective_max_input,  # Let OpenHands handle context truncation
             litellm_extra_body={
                 "return_token_ids": True,
                 "include_stop_str_in_output": True,
@@ -200,19 +210,26 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             generator_cfg, skyrl_gym_cfg, inference_engine_client, tokenizer, model_name
         )
 
-        self.http_endpoint_host = generator_cfg.get(
-            "http_endpoint_host", "127.0.0.1"
-        )
+        # NOTE:
+        # `http_endpoint_host` is often set to "0.0.0.0" for *binding* the local server,
+        # but clients should not connect to 0.0.0.0. When we build the OpenAI-compatible
+        # base_url for LiteLLM/OpenHands, prefer a loopback address in that case.
+        self.http_endpoint_host = generator_cfg.get("http_endpoint_host", "127.0.0.1")
         self.http_endpoint_port = generator_cfg.get(
             "http_endpoint_port", 8000
         )
-        self.base_url = f"http://{self.http_endpoint_host}:{self.http_endpoint_port}/v1/"
+        request_host = self.http_endpoint_host
+        if request_host in {"0.0.0.0", "::"}:
+            request_host = "127.0.0.1"
+        self.base_url = f"http://{request_host}:{self.http_endpoint_port}/v1/"
         logger.info(f"Using CodeSearchGenerator with model {model_name} at {self.base_url}")
         self.generator_cfg = generator_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        # self.litellm_model_name = "openai/" + self.model_name
-        self.litellm_model_name = "litellm_proxy/" + self.model_name
+        
+        # LiteLLM model routing: supports both HF model IDs and local paths
+        # Examples: "Qwen/Qwen2.5-7B" or "/path/to/model" or "./models/qwen"
+        self.litellm_model_name = f"openai/{self.model_name}"
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError(

@@ -74,8 +74,6 @@ def compute_tool_call_metrics(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
         - avg_tool_calls_per_step: Average tool calls per step
         - tool_call_breakdown: Dict mapping tool names to counts
     """
-    # Find all assistant messages with tool calls
-    tool_call_count = 0
     tool_breakdown = {}
     if not messages:
         return {
@@ -84,26 +82,14 @@ def compute_tool_call_metrics(messages: List[Dict[str, Any]]) -> Dict[str, Any]:
             "tool_call_breakdown": {},
         }
 
-    for msg in messages:
-        # Assistant messages contain tool_calls field
-        if msg.get("role") == "assistant" and "tool_calls" in msg:
-            tool_calls = msg.get("tool_calls", [])
-            tool_call_count += len(tool_calls)
-
-            # Track tool types
-            for tool_call in tool_calls:
-                # Handle both dict and object-like structures
-                if isinstance(tool_call, dict):
-                    if "function" in tool_call:
-                        tool_name = tool_call["function"].get("name", "unknown")
-                    else:
-                        tool_name = "unknown"
-                elif hasattr(tool_call, "function"):
-                    tool_name = getattr(tool_call.function, "name", "unknown")
-                else:
-                    tool_name = "unknown"
-
-                tool_breakdown[tool_name] = tool_breakdown.get(tool_name, 0) + 1
+    # Count tool calls from ActionEvents (the actual tool invocations)
+    action_messages = [msg for msg in messages if msg.get("kind") == "ActionEvent"]
+    tool_call_count = len(action_messages)
+    
+    # Track tool types from ActionEvents
+    for action in action_messages:
+        tool_name = action.get("tool_name", "unknown")
+        tool_breakdown[tool_name] = tool_breakdown.get(tool_name, 0) + 1
 
     # Calculate average per step
     num_steps = compute_step_count(messages)

@@ -36,6 +36,11 @@ NUM_TRAINING_ENGINES="${NUM_TRAINING_ENGINES:-$HALF_NUM_GPUS}"
 export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
+# fully-async constraints:
+# - train_batch_size must equal policy_mini_batch_size
+# - mini_batch_size <= num_parallel_generation_workers <= mini_batch_size * (max_staleness_steps + 1)
+NUM_PARALLEL_GENERATION_WORKERS="${NUM_PARALLEL_GENERATION_WORKERS:-$TRAIN_BATCH_SIZE}"
+
 
 uv run --isolated -m src.train \
   +run_async_trainer=true \
@@ -49,7 +54,7 @@ uv run --isolated -m src.train \
   trainer.policy.fsdp_config.cpu_offload=true \
   trainer.policy.fsdp_config.reshard_after_forward=true \
   trainer.policy.fsdp_config.fsdp_size=-1 \
-  trainer.fully_async.num_parallel_generation_workers=16 \
+  trainer.fully_async.num_parallel_generation_workers="${NUM_PARALLEL_GENERATION_WORKERS}" \
   trainer.placement.policy_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
   trainer.placement.ref_num_gpus_per_node=${NUM_TRAINING_ENGINES} \
   trainer.placement.policy_num_nodes=1 \
@@ -61,7 +66,7 @@ uv run --isolated -m src.train \
   +generator.engine_init_kwargs.enable_auto_tool_choice=true \
   +generator.engine_init_kwargs.tool_call_parser=hermes \
   +generator.engine_init_kwargs.reasoning_parser=qwen3 \
-  trainer.epochs=20 \
+  trainer.epochs=1 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
   trainer.eval_interval=100 \
@@ -72,8 +77,8 @@ uv run --isolated -m src.train \
   trainer.micro_train_batch_size_per_gpu=${MICRO_BATCH_SIZE:-1} \
   trainer.dump_data_batch=true \
   trainer.export_path="${CKPT_PATH}exported_model/" \
-  trainer.hf_save_interval=5 \
-  trainer.ckpt_interval=5 \
+  trainer.hf_save_interval=10 \
+  trainer.ckpt_interval=10 \
   trainer.max_prompt_length=4096 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
@@ -93,11 +98,11 @@ uv run --isolated -m src.train \
   generator.n_samples_per_prompt=${N_ROLLOUTS} \
   generator.gpu_memory_utilization=0.75 \
   generator.enforce_eager=false \
-  trainer.step_wise_training=true \
+  +trainer.step_wise_training=true \
   trainer.logger="wandb" \
-  trainer.project_name="code_search" \
+  trainer.project_name="${PROJECT_NAME}" \
   trainer.run_name=${RUN_NAME} \
   trainer.resume_mode=latest \
   trainer.ckpt_path="$CKPT_PATH" \
   trainer.max_ckpts_to_keep=3 \
-  $OTHER_OPTION
+  $OTHER_OPTION 2>&1 | tee logs/${LOG_DATE}_${RUN_NAME}.log
