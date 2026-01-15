@@ -216,8 +216,20 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.generator_cfg = generator_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        # self.litellm_model_name = "openai/" + self.model_name
-        self.litellm_model_name = "litellm_proxy/" + self.model_name
+        # IMPORTANT:
+        # OpenHands uses LiteLLM under the hood, which requires a provider prefix to
+        # route requests (otherwise it raises "LLM Provider NOT provided").
+        #
+        # We are talking to SkyRL's OpenAI-compatible endpoint (api_base=self.base_url),
+        # so we use the "openai/" provider prefix. LiteLLM will route the call as
+        # OpenAI-compatible *and* keep the actual model identifier as the part after
+        # the first slash, which preserves SkyRL's strict model-name check.
+        #
+        # Example:
+        #   self.model_name = "/path/to/qwen3-4b"
+        #   self.litellm_model_name = "openai//path/to/qwen3-4b"
+        # SkyRL receives model="/path/to/qwen3-4b" (matches loaded model name).
+        self.litellm_model_name = f"openai/{self.model_name}"
 
         if self.generator_cfg.chat_template.name_or_path is not None:
             raise NotImplementedError(
