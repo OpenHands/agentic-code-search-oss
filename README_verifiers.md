@@ -28,3 +28,5 @@ sudo apt-get install ripgrep -y
 ```bash
 uv run vf-eval swe-grep-oss-env --api-base-url http://localhost:8000/v1 --model "Qwen/Qwen3-8B" --num-examples 1 --rollouts-per-example 1
 ```
+
+> Note: `verifiers` is pinned to `0.1.6.post0` for SDK/API compatibility. If you hit version mismatch issues, re-run `uv sync` and avoid installing `verifiers` via `pip` outside the `uv` environment.
