@@ -123,6 +123,12 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
+    # Get max_input_length from config to prevent context overflow
+    max_input_length = generator_cfg.get("max_input_length", 38400)
+    # Reserve some tokens for system prompt, tools, and response generation
+    # Set max_input_tokens to ensure OpenHands handles context length properly
+    effective_max_input = max_input_length - 2000  # Reserve 2000 tokens for overhead
+
     agent = CustomAgent(
         llm=LLM(
             usage_id="agent",
@@ -130,6 +136,7 @@ def init_and_run(
             base_url=litellm_base_url,
             api_key="sk-xxx",
             temperature=temperature,
+            max_input_tokens=effective_max_input,  # Let OpenHands handle context truncation
             litellm_extra_body={
                 "return_token_ids": True,
                 "include_stop_str_in_output": True,
