@@ -5,17 +5,16 @@ def tool_use_reward(messages, max_tool_use=5, **kwargs) -> float:
     token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
     tool_messages = [msg for msg in messages if msg["kind"] == "ActionEvent"]
     
-    num_turns = min(1, len(token_messages) - 1)
+    num_turns = len(token_messages)
     num_tool_calls = len(tool_messages)
     
     if num_turns == 0:
         return 0.0
     
-    average_tool_use = num_tool_calls / num_turns
+    # if num_tool_calls/num_turns >= 1.0:
+    #     return num_tool_calls/num_turns
 
-    reward = min(average_tool_use, max_tool_use) / max_tool_use
-
-    return reward
+    return num_tool_calls/num_turns
 
 @reward("turn_efficiency")
 def turn_efficiency(messages, max_turns=5, **kwargs) -> float:

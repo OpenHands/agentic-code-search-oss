@@ -85,6 +85,10 @@ def get_structured_locations(events: List[Event]) -> Optional[List[Dict[str, Any
         List of location dicts with 'file', 'class', 'function' keys, or None if not found.
     """
     # Find the last LocalizationFinishAction
+    cnt = [1 for event in events if isinstance(event, ActionEvent) and event.source == "agent" and isinstance(event.action, LocalizationFinishAction)]
+    cnt = sum(cnt)
+    if cnt != 1: # the localization finish tool must be called exactly once.
+        return None
     for event in reversed(events):
         if (
             isinstance(event, ActionEvent)
@@ -277,6 +281,72 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "max_train_length", 100000
         )
 
+    def sanity_check_last_step(self, token_messages):
+        # Checks if the tool call formatting is correct in the last step from the detokenized response str of the last turn
+        if len(token_messages) == 0:
+            return False
+        response_token_ids = token_messages[-1]["response_token_ids"]
+        last_response_str: str = self.tokenizer.decode(response_token_ids, skip_special_tokens=False)
+        # First sanity check -- verify if there is exactly one <tool_call> and one </tool_call> in response (if there are multiple tool calls give 0 reward regardless of correctness)
+        cnt_tool_call = last_response_str.count("<tool_call>")
+        cnt_tool_end = last_response_str.count("</tool_call>")
+        if cnt_tool_call != 1 or cnt_tool_end != 1:
+            return False
+        # Second sanity check -- verify if the <|im_end|> is present exactly once
+        elif last_response_str.count("<|im_end|>") != 1:
+            return False
+        # Third sanity check -- verify if there is no non-whitespace text after </tool_call> and before <|im_end|>
+        else:
+            portion = last_response_str.split("</tool_call>")[1].split("<|im_end|>")[0]
+            if portion.strip() != "":
+                return False
+        return True
+
+    def get_last_observation(self, token_ids):
+        end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
+        obs_ids = []
+        flag = False
+        for idx in reversed(range(len(token_ids))):
+            token_id = token_ids[idx]
+            if token_id == end_of_turn_token_id:
+                if flag:
+                    break
+                else:
+                    flag = True
+            obs_ids.append(token_id)
+        obs_ids = list(reversed(obs_ids))
+        return obs_ids
+
+    def construct_trajectory(self, token_messages):
+        max_train_len = self.max_train_length
+        prompt_token_ids = token_messages[0]["prompt_token_ids"]
+        mask = []
+        response_token_ids = []
+        response_log_probs = []
+
+        response_token_ids += token_messages[0]["response_token_ids"]
+        mask += [1]*len(token_messages[0]["response_token_ids"])
+        response_log_probs += token_messages[0]["response_logprobs"]
+
+        for i in range(1, len(token_messages)):
+            action_i = token_messages[i]["response_token_ids"]
+            observation_i_1 = self.get_last_observation(token_messages[i]["prompt_token_ids"])
+
+            response_token_ids += observation_i_1
+            response_log_probs += [0.0] * len(observation_i_1)
+            mask += [0] * len(observation_i_1)
+
+            response_token_ids += action_i
+            response_log_probs += token_messages[i]["response_logprobs"]
+            mask += [1] * len(action_i)
+        
+        max_response_len = max_train_len - len(prompt_token_ids)
+        if len(response_token_ids) > max_train_len - len(prompt_token_ids):
+            for i in range(max_response_len, len(response_token_ids)):
+                mask[i] = 0
+        assert len(response_token_ids) == len(mask) and len(response_log_probs) == len(mask)
+        return prompt_token_ids, response_token_ids, response_log_probs, mask
+
     async def code_search_loop(
         self,
         prompt: ConversationType,
@@ -321,6 +391,17 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         # for i, message in enumerate(messages):
         #     print(f"Message {i}: {str(message)[:100]}")
         # print("Final message:", final_message)
+
+        # Run sanity check before computing the reward so that the logged metrics reflect the actual reward received in training
+        token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
+        trajectory_exhausted_steps = structured_locations is None and len(token_messages) >= self.generator_cfg.max_turns
+
+        # NOTE: The agent called the custom finish tool but there were some sanity check issues like calling the tool multiple times, having extra text after ending the tool-call, calling this tool in parallel with other tools etc. Give 0 reward in such cases.
+        # TODO: This check is not done for previous turns -- is this needed?
+        if structured_locations is not None and self.sanity_check_last_step(token_messages) == False:
+            # If sanity check fails, set structured_locations to None so that reward fns that depend on it give 0 reward
+            structured_locations = None
+            final_message = ""
 
         # Reward Manager
         reward = 0
@@ -398,78 +479,66 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             else:
                 # Max Sequence for training
                 max_train_len = self.max_train_length
+                current_prompt_ids, current_response_ids, response_logprobs, mask = self.construct_trajectory(token_messages)
 
-                current_prompt_ids = token_messages[0]["prompt_token_ids"]
-                ending_prompt_ids = token_messages[-1]["prompt_token_ids"]
-                ending_response_ids = token_messages[-1]["response_token_ids"]
-                current_response_ids = ending_prompt_ids + ending_response_ids
-                current_response_ids = current_response_ids[len(current_prompt_ids):]
+                # current_prompt_ids = token_messages[0]["prompt_token_ids"]
+                # ending_prompt_ids = token_messages[-1]["prompt_token_ids"]
+                # ending_response_ids = token_messages[-1]["response_token_ids"]
+                # current_response_ids = ending_prompt_ids + ending_response_ids
+                # current_response_ids = current_response_ids[len(current_prompt_ids):]
 
-                max_response_len = max_train_len - len(current_prompt_ids)
-                mask = [1]*len(token_messages[0]["response_token_ids"])
-                for i in range(1, len(token_messages)):
-                    mask += [0] * (len(token_messages[i]["prompt_token_ids"]) - len(token_messages[i-1]["prompt_token_ids"]) - len(token_messages[i-1]["response_token_ids"]))
-                    mask += [1] * len(token_messages[i]["response_token_ids"])
-                # make mask of 0 for everything inside <|im_start|> 
-                # and assistant and 1 elsewhere 
-                start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
-                end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
-                end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
-                mask = []
-                found_role_switch = False
-                inside = False
-                idx = 0
-                while idx < len(current_response_ids):
-                    token_id = current_response_ids[idx]
-                    if not inside:
-                        mask.append(1)
-                        idx += 1
-                        if token_id == end_of_turn_token_id:
-                            inside = True
-                    else:
-                        if token_id == start_token_id:
-                            inside = True
-                            mask.append(0)
-                            idx += 1
-                        elif token_id == end_token_id and found_role_switch:
-                            inside = False
-                            mask.append(0)
-                            mask.append(0)
-                            idx += 2
-                        else:
-                            mask.append(0)
-                            idx += 1
-
-                        if token_id == start_token_id:
-                            found_role_switch = True
-                        else:
-                            found_role_switch = False
-
-
-                # for token_id in current_response_ids:
-                #     if token_id == start_token_id:
-                #         inside = True
-                #         mask.append(0)
-                #     elif token_id == end_token_id and found_role_switch: # mark as start of assistant response only if the immediately previous token is <im_start>, else it is present in between somewhere
-                #         inside = False
-                #         mask.append(0)
+                # max_response_len = max_train_len - len(current_prompt_ids)
+                # # make mask of 0 for everything inside <|im_start|> 
+                # # and assistant and 1 elsewhere 
+                # start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
+                # end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
+                # end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
+                # mask = []
+                # found_role_switch = False
+                # inside = False
+                # idx = 0
+                # while idx < len(current_response_ids):
+                #     token_id = current_response_ids[idx]
+                #     if not inside:
+                #         mask.append(1)
+                #         idx += 1
+                #         if token_id == end_of_turn_token_id:
+                #             inside = True
                 #     else:
-                #         if inside:
+                #         if token_id == start_token_id:
+                #             inside = True
                 #             mask.append(0)
+                #             idx += 1
+                #         elif token_id == end_token_id and found_role_switch:
+                #             inside = False
+                #             mask.append(0)
+                #             mask.append(0)
+                #             idx += 2
                 #         else:
-                #             mask.append(1)
-                #     if token_id == start_token_id:
-                #         found_role_switch = True
-                #     else:
-                #         found_role_switch = False
-                #     if token_id == end_of_turn_token_id and not inside:
-                #         inside = True
+                #             mask.append(0)
+                #             idx += 1
 
-                # mask zero out everything beyond max_response_len
-                # Don't truncate the response, just mask out the loss
-                if len(current_response_ids) > max_response_len:
-                    for i in range(max_response_len, len(current_response_ids)):
-                        mask[i] = 0
+                #         if token_id == start_token_id:
+                #             found_role_switch = True
+                #         else:
+                #             found_role_switch = False
+
+                # # mask zero out everything beyond max_response_len
+                # # Don't truncate the response, just mask out the loss
+                # if len(current_response_ids) > max_response_len:
+                #     for i in range(max_response_len, len(current_response_ids)):
+                #         mask[i] = 0
+                
+                # mask loss completely from trajectories that exhausted all steps without calling the custom finish tool
+                if trajectory_exhausted_steps:
+                    logger.info("Trajectory exhausted all steps without calling the custom finish tool. Masking out loss from this rollout.")
+                    for i in range(len(mask)):
+                        mask[i] = 0 
+
+                # # If the trajectory did not call the custom finish tool within max turns, it did not complete successfully, mask its loss
+                # if num_steps >= self.generator_cfg.max_turns and (structured_locations is None or len(structured_locations) == 0):
+                #     for i in range(len(mask)):
+                #         mask[i] = 0 # mask loss completely from trajectories that did not complete within max_turns 
 
                 rollout_list.append(
                     (
@@ -478,20 +547,22 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                         "complete",
                         mask,
                         current_prompt_ids,
-                        None,
+                        response_logprobs,
                         trajectory_metrics
                     )
                 )
 
         else:
             # Ideally the code should not reach here
+            logger.info("IMPORTANT_ERROR: No TokenEvents found in the conversation. Saving an error rollout with minimal data.")
             response_ids = [151643]
             stop_reason = "error"
-            loss_mask = [1]
+            loss_mask = [0] # NOTE: Mask out loss completely
             initial_input_ids = [151643]
+            response_logprobs = [0.0]
             trajectory_metrics = {}  # Empty metrics for error case
             rollout_list.append(
-                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, None, trajectory_metrics)
+                (response_ids, reward, stop_reason, loss_mask, initial_input_ids, response_logprobs, trajectory_metrics)
             )
 
         # Add "/" at the end of traj_dir if not present
@@ -527,7 +598,10 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 os.makedirs(os.path.dirname(filename_path), exist_ok=True)
 
             # get everything between ```` with regex
-            raw_final_message = final_message
+            try:
+                raw_final_message = structured_locations if structured_locations is not None else {}
+            except Exception as e:
+                raw_final_message = ""
             matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
             parsed_final_message = matches[-1] if matches else final_message
 
@@ -593,6 +667,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         stop_reasons = sum([[output[2] for output in step_outputs] for step_outputs in all_outputs], [])
         loss_masks = sum([[output[3] for output in step_outputs] for step_outputs in all_outputs], [])
         prompt_token_ids = sum([[output[4] for output in step_outputs] for step_outputs in all_outputs], [])
+        response_logprobs = sum([[output[5] for output in step_outputs] for step_outputs in all_outputs], [])
 
         out_trajectory_ids = []
         is_last_step = []
@@ -637,7 +712,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "loss_masks": loss_masks,
             "stop_reasons": stop_reasons,
             "rollout_metrics": rollout_metrics,
-            "rollout_logprobs": None,
+            "rollout_logprobs": response_logprobs,
             "is_last_step": is_last_step,
             **tracked_metrics,
         }

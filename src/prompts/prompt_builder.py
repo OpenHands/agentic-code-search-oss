@@ -9,8 +9,6 @@ def get_instruction(
     workspace_path: str,
 ) -> str:
     """Generate instruction for the agent."""
-    workspace_dir_name = instance["repo"].split("/")[-1]
-
     # Set up Jinja2 environment
     if prompt_path is None:
         prompt_path = os.path.join(path, "templates", "default.j2")
@@ -22,7 +20,6 @@ def get_instruction(
     # Prepare context for rendering
     context = {
         "instance": instance,
-        "workspace_dir_name": workspace_dir_name,
         "working_dir": workspace_path,
     }
     context["test_instructions"] = ""

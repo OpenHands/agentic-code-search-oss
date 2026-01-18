@@ -50,7 +50,7 @@ export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
 
-uv run --isolated -m src.train \
+uv run --active --isolated -m src.train \
   +run_async_trainer=true \
   data.train_data="['$DATA_PATH/train.parquet']" \
   data.val_data="['$DATA_PATH/validation.parquet']" \
@@ -77,7 +77,7 @@ uv run --isolated -m src.train \
   +generator.engine_init_kwargs.max_model_len=40960 \
   +generator.prompts.system_prompt="templates/system_prompt_custom_finish.j2" \
   +generator.prompts.user_prompt="templates/file_module.j2" \
-  trainer.epochs=5 \
+  trainer.epochs=1 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
   trainer.eval_interval=-1 \
@@ -88,10 +88,14 @@ uv run --isolated -m src.train \
   trainer.micro_train_batch_size_per_gpu=${MICRO_BATCH_SIZE} \
   trainer.dump_data_batch=true \
   trainer.export_path="${CKPT_PATH}exported_model/" \
-  trainer.hf_save_interval=15 \
-  trainer.ckpt_interval=15 \
+  trainer.hf_save_interval=50 \
+  trainer.ckpt_interval=50 \
   trainer.use_sample_packing=false \
   trainer.max_prompt_length=40960 \
+  trainer.algorithm.policy_loss_type="gspo" \
+  trainer.algorithm.loss_reduction="sequence_mean" \
+  trainer.algorithm.tis_imp_ratio_cap=2.0\
+  trainer.algorithm.use_tis=true\
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
   generator.max_input_length=40960 \
@@ -117,6 +121,6 @@ uv run --isolated -m src.train \
   trainer.run_name=${RUN_NAME} \
   trainer.resume_mode=latest \
   trainer.ckpt_path="$CKPT_PATH" \
-  trainer.max_ckpts_to_keep=5 \
+  trainer.max_ckpts_to_keep=2 \
   $OTHER_OPTION \
   # +generator.engine_init_kwargs.reasoning_parser=qwen3 \

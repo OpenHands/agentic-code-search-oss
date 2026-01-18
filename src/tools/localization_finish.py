@@ -43,7 +43,7 @@ class LocalizationFinishAction(Action):
 """
     )
 
-    message: str = Field(description="Code localization submission sent to the user.")
+    # message: str = Field(description="Code localization submission sent to the user.")
 
     @property
     def visualize(self) -> Text:

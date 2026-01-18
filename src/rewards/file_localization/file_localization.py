@@ -46,6 +46,14 @@ def multilevel_localization_f1_reward(
     **kwargs
     ):
 
+    if structured_locations is None:
+        return 0, {
+        "multilevel_localization_f1_reward": 0,
+        "file_reward": 0,
+        "module_reward": 0,
+        "entity_reward": 0,
+    }
+
     gt_files = []
     gt_modules = []
     gt_entities = []
