@@ -1,91 +1,127 @@
 import argparse
 import subprocess
-from concurrent.futures import ThreadPoolExecutor, as_completed
+import shutil
+from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
 from datasets import load_dataset
+import polars as pl
 from tqdm import tqdm
 
 
-def clone_instance(
-    repo_name: str, commit_id: str, instance_id: str, output_dir: Path
-) -> bool:
+def _run(cmd: list[str], *, verbose: bool, **kwargs):
+    if verbose:
+        return subprocess.run(cmd, check=True, **kwargs)
+    return subprocess.run(cmd, check=True, capture_output=True, text=True, **kwargs)
+
+
+def fetch_commits(
+    repo_name: str,
+    base_commits: list[str],
+    output_dir: Path,
+    verbose: bool,
+) -> tuple[Path, Path, list[str]]:
     """
-    Clone a repository at a specific commit into a separate directory.
-
-    Args:
-        repo_name: Repository name in format 'owner/repo'
-        commit_id: Commit hash to checkout
-        instance_id: Instance ID for directory naming
-        output_dir: Base output directory
-
-    Returns:
-        True if successful, False otherwise
+    Fetch a list of commits from a repository.
     """
-    # Create instance directory name: repo_instance-id
-    # E.g., astropy_astropy-12907
-    instance_dir_name = f"{repo_name.replace('/', '_')}_{instance_id}"
-    instance_path = output_dir / instance_dir_name
+    repo_slug = repo_name.replace("/", "__")
+    repo_dir = output_dir / repo_slug
+    repo_dir.mkdir(parents=True, exist_ok=True)
 
-    # Skip if already exists
-    if instance_path.exists():
-        return True
+    cache_dir = output_dir / "cache" / f"{repo_slug}.git"
+    cache_dir.parent.mkdir(parents=True, exist_ok=True)
 
-    try:
-        # Clone the repository
-        subprocess.run(
+    if not cache_dir.exists():
+        _run(
+            ["git", "init", "--bare", str(cache_dir)],
+            verbose=verbose,
+        )
+        _run(
             [
                 "git",
-                "clone",
+                "-C",
+                str(cache_dir),
+                "remote",
+                "add",
+                "origin",
                 f"https://github.com/{repo_name}.git",
-                str(instance_path),
-                "--depth",
-                "1",
-                "--revision",
-                commit_id,
             ],
+            verbose=verbose,
+        )
+
+    _run(
+        [
+            "git",
+            "-C",
+            str(cache_dir),
+            "fetch",
+            "--depth",
+            "1",
+            "origin",
+            *base_commits,
+        ],
+        verbose=verbose,
+    )
+    return cache_dir, repo_dir, base_commits
+
+
+def export_repo(output_dir: Path, repo_name: str, base_commit: str, *, verbose: bool) -> bool:
+    """
+    Export a repository at a specific commit.
+    """
+    repo_slug = repo_name.replace("/", "__")
+    cache_dir = output_dir / "cache" / f"{repo_slug}.git"
+    repo_dir = output_dir / repo_slug
+    out_dir = repo_dir / base_commit
+    out_dir.mkdir(parents=True, exist_ok=False)
+
+    git_archive = subprocess.Popen(
+        ["git", "-C", str(cache_dir), "archive", base_commit],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.PIPE,
+    )
+    if verbose:
+        subprocess.run(
+            ["tar", "-x", "-C", str(out_dir)],
             check=True,
+            stdin=git_archive.stdout,
+        )
+    else:
+        subprocess.run(
+            ["tar", "-x", "-C", str(out_dir)],
+            check=True,
+            stdin=git_archive.stdout,
             capture_output=True,
             text=True,
         )
-
-        return True
-    except subprocess.CalledProcessError as e:
-        return False
+    git_archive.stdout.close()
+    git_archive_stderr = git_archive.stderr.read()
+    git_archive.stderr.close()
+    git_archive_rc = git_archive.wait()
+    if git_archive_rc != 0:
+        raise subprocess.CalledProcessError(
+            git_archive_rc,
+            git_archive.args,
+            stderr=git_archive_stderr.decode("utf-8", errors="replace"),
+        )
+    return True
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Clone repositories from SWE-bench dataset"
+        description="Clone repos from the input dataset"
     )
     parser.add_argument(
         "--output-dir",
         type=str,
-        default="./swebench_repos",
-        help="Directory to clone repositories into (default: ./swebench_repos)",
+        default=None,
+        help="Root directory for cloned repos (default: ./swebench_repos)",
     )
     parser.add_argument(
         "--dataset",
         type=str,
-        default="princeton-nlp/SWE-bench_Lite",
-        help="SWE-bench dataset to use (default: princeton-nlp/SWE-bench_Lite)",
-    )
-    parser.add_argument(
-        "--max-instances",
-        type=int,
-        default=None,
-        help="Maximum number of instances to process (for testing)",
-    )
-    parser.add_argument(
-        "--max-repos",
-        type=int,
-        default=None,
-        help="Maximum number of repositories to clone (for testing)",
-    )
-    parser.add_argument(
-        "--show-fields",
-        action="store_true",
-        help="Show available fields in the dataset and exit",
+        default="adityasoni17/SWE-bench_Lite-code-search",
+        help="Dataset to use (default: adityasoni17/SWE-bench_Lite-code-search)",
     )
     parser.add_argument(
         "--max-workers",
@@ -93,101 +129,79 @@ def main():
         default=4,
         help="Maximum number of concurrent clone operations (default: 4)",
     )
+    parser.add_argument(
+        "--verbose",
+        action="store_true",
+        help="Print git/tar output to the terminal",
+    )
 
     args = parser.parse_args()
 
-    output_dir = Path(args.output_dir)
+    if args.output_dir is None:
+        project_root = Path(__file__).resolve().parents[1]
+        output_dir = (project_root / "repos").resolve()
+    else:
+        output_dir = Path(args.output_dir).expanduser().resolve()
     output_dir.mkdir(parents=True, exist_ok=True)
 
-    print(f"Loading SWE-bench dataset: {args.dataset}")
-    dataset = load_dataset(args.dataset, split="test")
-    print(f"✓ Loaded {len(dataset)} instances")
+    print(f"Loading dataset: {args.dataset}")
+    dataset = (
+        list(load_dataset(args.dataset, columns=["repo", "base_commit"]).values())[0] # get the first split
+        .to_polars()
+        .unique()
+    )
 
-    # Show available fields if requested
-    if args.show_fields:
-        print("\n" + "=" * 80)
-        print("Available fields in dataset:")
-        print("=" * 80)
-        if len(dataset) > 0:
-            first_instance = dataset[0]
-            for key in sorted(first_instance.keys()):
-                value = first_instance[key]
-                # Truncate long values
-                value_str = str(value)
-                if len(value_str) > 100:
-                    value_str = value_str[:100] + "..."
-                print(f"{key:25s}: {value_str}")
-        print("=" * 80)
-        return
-
-    # Collect all instances to process
-    instances_to_process = []
-    for instance in dataset:
-        instances_to_process.append(
-            {
-                "repo": instance["repo"],
-                "instance_id": instance["instance_id"],
-                "base_commit": instance["base_commit"],
-            }
-        )
-
-    # Apply max-repos filter
-    if args.max_repos:
-        # Group by repo and take first N repos
-        repos_seen = set()
-        filtered_instances = []
-        for instance in instances_to_process:
-            if instance["repo"] not in repos_seen:
-                if len(repos_seen) >= args.max_repos:
-                    continue
-                repos_seen.add(instance["repo"])
-            if instance["repo"] in repos_seen:
-                filtered_instances.append(instance)
-        instances_to_process = filtered_instances
-        print(f"\n(Limited to {args.max_repos} repositories)")
-
-    # Apply max-instances filter
-    if args.max_instances:
-        instances_to_process = instances_to_process[: args.max_instances]
-        print(f"(Limited to {args.max_instances} instances)")
-
-    print(f"\nProcessing {len(instances_to_process)} instances")
+    print(f"\nProcessing {len(dataset)} repo instances")
     print(f"Using {args.max_workers} concurrent workers")
     print("=" * 80)
 
     # Clone each instance concurrently
+    total_instances = len(dataset)
+    grouped = (
+        dataset.group_by("repo")
+        .agg(pl.col("base_commit").unique().alias("base_commits"))
+    )
+
     successful = 0
     with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
-        # Submit all tasks
-        future_to_instance = {
-            executor.submit(
-                clone_instance,
-                instance["repo"],
-                instance["base_commit"],
-                instance["instance_id"],
-                output_dir,
-            ): instance
-            for instance in instances_to_process
-        }
-
-        # Process completed tasks with progress bar
-        for future in tqdm(
-            as_completed(future_to_instance),
-            total=len(instances_to_process),
-            desc="Cloning instances",
+        for _ in tqdm(
+            executor.map(
+                lambda row: fetch_commits(
+                    row["repo"],
+                    row["base_commits"],
+                    output_dir,
+                    args.verbose,
+                ),
+                grouped.iter_rows(named=True),
+            ),
+            total=len(grouped),
+            desc="Fetching repos",
         ):
-            if future.result():
+            pass
+
+    total_exports = total_instances
+    with ThreadPoolExecutor(max_workers=args.max_workers) as executor:
+        results = executor.map(
+            lambda row: export_repo(
+                output_dir,
+                row["repo"],
+                row["base_commit"],
+                verbose=args.verbose,
+            ),
+            dataset.iter_rows(named=True),
+        )
+        for ok in tqdm(results, total=total_exports, desc="Exporting commits"):
+            if ok:
                 successful += 1
+
+    print("Removing cache...")
+    shutil.rmtree(output_dir / "cache")
 
     print("\n" + "=" * 80)
     print("Summary:")
     print("=" * 80)
     print(f"Output directory: {output_dir.absolute()}")
-    total = len(instances_to_process)
-    print(f"Successfully cloned: {successful}/{total} instances")
-    print(
-        "Note: Each instance is in its own directory named <repo>_<instance_id>"
-    )
+    print(f"Successfully cloned: {successful}/{total_instances} instances")
     print("\nDone! 🎉")
 
 
