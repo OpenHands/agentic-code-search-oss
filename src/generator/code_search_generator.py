@@ -4,7 +4,6 @@ import asyncio
 from pyexpat.errors import messages
 from socket import timeout
 from typing import Dict, List, Optional, Any, Tuple, Union
-import uuid
 from omegaconf import DictConfig
 import traceback
 import ray
@@ -56,7 +55,6 @@ from openhands.sdk import (
 )
 
 from src.prompts.prompt_builder import get_instruction
-from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
@@ -87,14 +85,19 @@ def init_and_run(
     training_phase: Union[TrainingPhase, Any],
 ):
 
-    instance_id = instance["instance_id"]
     repo_name = instance["repo"]
     commit_id = instance["base_commit"]
-    
-    # Avoid collisions in /tmp testbed directories
-    uuid_str = str(uuid.uuid4())[:8]
-    workspace = Path(f"/tmp/testbed/{uuid_str}/")
-    status, working_dir = clone_instance(repo_name, commit_id, instance_id, workspace)
+
+    repos_dir_cfg = generator_cfg.get("repos_dir", "./repos")
+    repos_dir = Path(repos_dir_cfg).expanduser().resolve()
+
+    repo_slug = repo_name.replace("/", "__")
+    working_dir = repos_dir / repo_slug / commit_id
+    if not working_dir.exists():
+        raise FileNotFoundError(
+            f"Repo directory not found: {working_dir}."
+            f"Make sure to run the repo cloning script."
+        )
 
     if training_phase == "eval":
         temperature = 0.6
