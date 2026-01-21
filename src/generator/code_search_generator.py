@@ -445,40 +445,35 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 current_response_ids = current_response_ids[len(current_prompt_ids):]
 
                 max_response_len = max_train_len - len(current_prompt_ids)
+
+                buffer_succeed = 5  # buffer tokens after assistant tag
+                buffer_precede = 1  # buffer tokens before im_start tag
                 # make mask of 0 for everything inside <|im_start|> 
                 # and assistant and 1 elsewhere 
                 start_token_id = self.tokenizer.convert_tokens_to_ids("<|im_start|>")
                 end_token_id = self.tokenizer.convert_tokens_to_ids("assistant")
-                end_of_turn_token_id = self.tokenizer.convert_tokens_to_ids("<|im_end|>")
                 mask = []
-                found_role_switch = False
                 inside = False
-                idx = 0
-                while idx < len(current_response_ids):
-                    token_id = current_response_ids[idx]
-                    if not inside:
-                        mask.append(1)
-                        idx += 1
-                        if token_id == end_of_turn_token_id:
-                            inside = True
+                buffer = 0
+                for token_id in current_response_ids:
+                    if token_id == start_token_id:
+                        inside = True
+                        for _ in range(buffer_precede):
+                            mask.pop()
+                        mask.extend([0] * buffer_precede)
+                        mask.append(0)
+                    elif token_id == end_token_id:
+                        inside = False
+                        mask.append(0)
+                        buffer = buffer_succeed
                     else:
-                        if token_id == start_token_id:
-                            inside = True
+                        if inside:
                             mask.append(0)
-                            idx += 1
-                        elif token_id == end_token_id and found_role_switch:
-                            inside = False
+                        elif buffer:
                             mask.append(0)
-                            mask.append(0)
-                            idx += 2
+                            buffer -= 1
                         else:
-                            mask.append(0)
-                            idx += 1
-
-                        if token_id == start_token_id:
-                            found_role_switch = True
-                        else:
-                            found_role_switch = False
+                            mask.append(1)
 
                 # mask zero out everything beyond max_response_len
                 # Don't truncate the response, just mask out the loss
