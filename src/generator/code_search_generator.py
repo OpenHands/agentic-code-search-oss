@@ -165,9 +165,6 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
-    assert os.path.exists(system_prompt_path), f"System prompt file {system_prompt_path} does not exist"
-    assert os.path.exists(user_prompt_path), f"User prompt file {user_prompt_path} does not exist"
-
     agent = CustomAgent(
         llm=LLM(
             usage_id="agent",
@@ -178,14 +175,14 @@ def init_and_run(
             litellm_extra_body={
                 "return_token_ids": True,
                 "include_stop_str_in_output": False,
+                "add_generation_prompt": True,
                 "chat_template_kwargs": {
-                    "add_generation_prompt": True,
-                    "enable_thinking": False
-                }
-            }
+                    "enable_thinking": False,
+                    }
+            },
         ),
         tools=tools,
-        # security_analyzer=None,
+        security_analyzer=None,
         system_prompt_filename=system_prompt_path
     )
 
@@ -196,49 +193,43 @@ def init_and_run(
         workspace=str(working_dir),
     )
     input_message = get_instruction(instance, user_prompt_path, str(working_dir))
+    conversation.send_message(input_message)
+
+    logger.info("Conversation Starting")
 
     # Capture start time
     start_time = time.time()
     start_timestamp = datetime.now().isoformat()
 
     try:
-        conversation.send_message(input_message)
-        logger.info("Conversation Starting")
         conversation.run()
-        messages = list(map(lambda event: event.model_dump(), conversation.state.events))
-        final_message = get_agent_final_response(conversation.state.events)
-        structured_locations = get_structured_locations(conversation.state.events)
     except Exception as e:
-        logger.error(f"Error during conversation: {str(e)}", exc_info=True)
-        try:
-            messages = list(map(lambda event: event.model_dump(), conversation.state.events))
-            final_message = get_agent_final_response(conversation.state.events)
-            structured_locations = get_structured_locations(conversation.state.events)
-        except Exception as e:
-            logger.error(f"Error during final message extraction in err'ed rollout: {str(e)}", exc_info=True)
-            messages = []
-            final_message = ""
-    finally:
-        # Capture end time
-        try:
-            if workspace.exists():
-                os.system(f"rm -rf {str(workspace)}")
-                logger.info(f"Removed workspace {str(workspace)}")
-            conversation.close()
-        except Exception as _:
-            pass
-        logger.info("Conversation Finished")
-        end_time = time.time()
-        end_timestamp = datetime.now().isoformat()
-        wall_clock_duration = end_time - start_time
+        logger.error(f"Error during conversation run: {e}", exc_info=True)
 
-        additional_attr = {
-            "wall_clock_duration": wall_clock_duration,
-            "start_timestamp": start_timestamp,
-            "end_timestamp": end_timestamp
-        }
+    messages = list(map(lambda event: event.model_dump(), conversation.state.events))
+    final_message = get_agent_final_response(conversation.state.events)
+    structured_locations = get_structured_locations(conversation.state.events)
+    try:
+        if workspace.exists():
+            os.system(f"rm -rf {str(workspace)}")
+            logger.info(f"Removed workspace {str(workspace)}")
+        conversation.close()
+    except Exception as _:
+        pass
+    conversation.close()
+    logger.info("Conversation Finished")
 
-    # NOTE: Hard-coded final message to ensure all rollouts that don't call the custom finish tool have reward == 0
+    # Capture end time
+    end_time = time.time()
+    end_timestamp = datetime.now().isoformat()
+    wall_clock_duration = end_time - start_time
+
+    additional_attr = {
+        "wall_clock_duration": wall_clock_duration,
+        "start_timestamp": start_timestamp,
+        "end_timestamp": end_timestamp
+    }
+
     return messages, final_message, structured_locations, additional_attr
 
 
@@ -269,7 +260,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.tokenizer = tokenizer
         self.model_name = model_name
         # self.litellm_model_name = "openai/" + self.model_name
-        self.litellm_model_name = "openai/" + self.model_name
+        self.litellm_model_name = "litellm_proxy/" + self.model_name
 
         # if self.generator_cfg.chat_template.name_or_path is not None:
         #     raise NotImplementedError(
@@ -329,7 +320,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 batch_metadata.training_phase,
             )
         except Exception as e:
-            logger.error(f"Critical Error in conversation: {str(e)}", exc_info=True)
+            logger.error(f"Error in starting conversation: {e}", exc_info=True)
             # TODO properly handle this
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
@@ -415,7 +406,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
-        num_steps = len(token_messages)
         if len(token_messages) > 0:
             if self.step_wise:
                 for idx, message in enumerate(token_messages):
@@ -500,11 +490,9 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 )
 
         else:
-            # Ideally the code should not reach here
-            logger.info("IMPORTANT_ERROR: No TokenEvents found in the conversation. Saving an error rollout with minimal data.")
             response_ids = [151643]
             stop_reason = "error"
-            loss_mask = [0] # NOTE: Mask out loss completely
+            loss_mask = [1]
             initial_input_ids = [151643]
             trajectory_metrics = {}  # Empty metrics for error case
             rollout_list.append(
@@ -544,10 +532,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 os.makedirs(os.path.dirname(filename_path), exist_ok=True)
 
             # get everything between ```` with regex
-            try:
-                raw_final_message = json.dumps(structured_locations) if structured_locations is not None else final_message
-            except Exception as e:
-                raw_final_message = ""
+            raw_final_message = final_message
             matches = re.findall(r"```(.*?)```", final_message, re.DOTALL)
             parsed_final_message = matches[-1] if matches else final_message
 
