@@ -76,8 +76,7 @@ explicit = true
 flash-attn = ["torch"]
 
 [tool.uv.sources]
-# skyrl-train = { git = "https://github.com/NovaSky-AI/SkyRL", rev = "69ca4d9", subdirectory = "skyrl-train" }
-skyrl-train = { path = "/project/flame/lsutawik/cso/SkyRL/skyrl-train", editable = true  }
+skyrl-train = { git = "https://github.com/adityasoni9998/SkyRL.git", rev = "81e5a97c7430503c0c4e6508497cc5aa01a0c624", subdirectory = "skyrl-train" }
 flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}
 openhands-sdk = { workspace = true }
 openhands-tools = { workspace = true }
