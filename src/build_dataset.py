@@ -3,12 +3,12 @@ import os
 
 from datasets import load_dataset
 
-# from src.utils.dataset import extract_functions_from_patch
+from src.utils.dataset import extract_functions_from_patch
 
 
 def main():
     parser = argparse.ArgumentParser(description="Build dataset from patches")
-    parser.add_argument("--dataset", default="adityasoni17/SWE-smith-py-code-search", help="Input dataset path")
+    parser.add_argument("--dataset", default="SWE-Gym/SWE-Gym", help="Input dataset path")
     parser.add_argument("--split", default="train", help="Dataset split to use")
     parser.add_argument("--output", required=True, help="Output file path for processed dataset")
     parser.add_argument("--use_patch", action="store_true", help="Whether to use patches to extract target functions")
@@ -18,7 +18,7 @@ def main():
     dataset = load_dataset(args.dataset, split=args.split).to_pandas()
 
     dataset["target"] = dataset.apply(
-        lambda row: row["file_changes"], axis=1
+        lambda row: f"{extract_functions_from_patch(row['patch'])}", axis=1
     )
 
     # Remove rows with empty problem_statement
@@ -30,7 +30,6 @@ def main():
 
     if args.use_patch:
         dataset["use_patch"] = True
-        dataset["base_commit"] = None
     else:
         dataset["use_patch"] = False
 
@@ -41,7 +40,7 @@ def main():
         pass
 
     # shuffle dataset
-    dataset = dataset.sample(frac=1, random_state=42).reset_index(drop=True)
+    dataset = dataset.sample(frac=1).reset_index(drop=True)
 
     # train_size = int(0.975 * len(dataset))
     train_dataset = dataset.iloc[:-100]

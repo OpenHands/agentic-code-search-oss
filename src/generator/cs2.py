@@ -57,8 +57,7 @@ from openhands.sdk import (
     LLMConvertibleEvent,
     get_logger,
 )
-from openhands.sdk.event import ActionEvent
-from src.tools.localization_finish import LocalizationFinishAction, LocalizationFinishTool
+
 from src.prompts.prompt_builder import get_instruction
 from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
@@ -77,35 +76,6 @@ logger = get_logger(__name__)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
-
-def get_structured_locations(events: List[Event]) -> Optional[List[Dict[str, Any]]]:
-    """Extract structured locations from LocalizationFinishAction in events.
-    Args:
-        events: List of conversation events to search through.
-    Returns:
-        List of location dicts with 'file', 'class', 'function' keys, or None if not found.
-    """
-    # Find the last LocalizationFinishAction
-    cnt = [1 for event in events if isinstance(event, ActionEvent) and event.source == "agent" and isinstance(event.action, LocalizationFinishAction)]
-    cnt = sum(cnt)
-    if cnt != 1: # the localization finish tool must be called exactly once.
-        return None
-    for event in reversed(events):
-        if (
-            isinstance(event, ActionEvent)
-            and event.source == "agent"
-            and isinstance(event.action, LocalizationFinishAction)
-        ):
-            # Extract structured locations from the action
-            locations = []
-            for loc in event.action.locations:
-                locations.append({
-                    "file": loc.file,
-                    "class_name": loc.class_name,
-                    "function_name": loc.function_name,
-                })
-            return locations
-    return None
 
 @ray.remote(num_cpus=0.01)
 def init_and_run(
@@ -139,7 +109,6 @@ def init_and_run(
         temperature = 1.0
 
     final_message = ""
-    structured_locations = None
     messages = []
 
     # for tool_name in generator_cfg.tools:
@@ -152,12 +121,12 @@ def init_and_run(
     #     Tool(name=tool_name) for tool_name in generator_cfg.tools
     # ]
 
-    register_tool(LocalizationFinishTool.name, LocalizationFinishTool)
     tools = [
         # Tool(name=GlobTool.name),
         # Tool(name=GrepTool.name),
         Tool(name=TerminalTool.name),
-        Tool(name="localization_finish"),
+        # Tool(name=ReadFileTool.name),
+        # Tool(name=ListDirectoryTool.name),
     ]
 
     # Get prompt paths from config (path-independent)
@@ -165,7 +134,7 @@ def init_and_run(
     system_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.system_prompt)
     user_prompt_path = os.path.join(prompts_base_dir, generator_cfg.prompts.user_prompt)
 
-    agent = CustomAgent(
+    agent = Agent(
         llm=LLM(
             usage_id="agent",
             model=litellm_model_name,
@@ -208,14 +177,7 @@ def init_and_run(
 
     messages = list(map(lambda event: event.model_dump(), conversation.state.events))
     final_message = get_agent_final_response(conversation.state.events)
-    structured_locations = get_structured_locations(conversation.state.events)
-    try:
-        if workspace.exists():
-            os.system(f"rm -rf {str(workspace)}")
-            logger.info(f"Removed workspace {str(workspace)}")
-        conversation.close()
-    except Exception as _:
-        pass
+
     conversation.close()
     logger.info("Conversation Finished")
 
@@ -230,7 +192,7 @@ def init_and_run(
         "end_timestamp": end_timestamp
     }
 
-    return messages, final_message, structured_locations, additional_attr
+    return messages, final_message, additional_attr
 
 
 class CodeSearchGenerator(SkyRLGymGenerator):
@@ -272,27 +234,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             "max_train_length", 32768
         )
 
-    def sanity_check_last_step(self, token_messages):
-        # Checks if the tool call formatting is correct in the last step from the detokenized response str of the last turn
-        if len(token_messages) == 0:
-            return False
-        response_token_ids = token_messages[-1]["response_token_ids"]
-        last_response_str: str = self.tokenizer.decode(response_token_ids, skip_special_tokens=False)
-        # First sanity check -- verify if there is exactly one <tool_call> and one </tool_call> in response (if there are multiple tool calls give 0 reward regardless of correctness)
-        cnt_tool_call = last_response_str.count("<tool_call>")
-        cnt_tool_end = last_response_str.count("</tool_call>")
-        if cnt_tool_call != 1 or cnt_tool_end != 1:
-            return False
-        # Second sanity check -- verify if the <|im_end|> is present exactly once
-        elif last_response_str.count("<|im_end|>") != 1:
-            return False
-        # Third sanity check -- verify if there is no non-whitespace text after </tool_call> and before <|im_end|>
-        else:
-            portion = last_response_str.split("</tool_call>")[1].split("<|im_end|>")[0]
-            if portion.strip() != "":
-                return False
-        return True
-
     async def code_search_loop(
         self,
         prompt: ConversationType,
@@ -308,7 +249,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         instance = env_extras
         error = None
         try:
-            messages, final_message, structured_locations, additional_attr = await init_and_run.remote(
+            messages, final_message, additional_attr = await init_and_run.remote(
                 instance,
                 self.litellm_model_name,
                 self.base_url,
@@ -325,7 +266,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
             error = str(e) + "\n" + traceback.format_exc()
             messages = []
             final_message = ""
-            structured_locations = None
             additional_attr = {
                 "wall_clock_duration": 0.0,
                 "start_timestamp": None,
@@ -338,17 +278,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         #     print(f"Message {i}: {str(message)[:100]}")
         # print("Final message:", final_message)
 
-        # Run sanity check before computing the reward so that the logged metrics reflect the actual reward received in training
-        token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
-        trajectory_exhausted_steps = structured_locations is None and len(token_messages) >= self.generator_cfg.max_turns
-
-        # NOTE: The agent called the custom finish tool but there were some sanity check issues like calling the tool multiple times, having extra text after ending the tool-call, calling this tool in parallel with other tools etc. Give 0 reward in such cases.
-        # NOTE: Similar checks are not done for previous turns
-        if structured_locations is not None and self.sanity_check_last_step(token_messages) == False:
-            # If sanity check fails, set structured_locations to None so that reward fns that depend on it give 0 reward
-            structured_locations = None
-            final_message = ""
-
         # Reward Manager
         reward = 0
         reward_dict = {}
@@ -359,7 +288,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                     "final_message": final_message,
                     "messages": messages,
                     "instance": instance,
-                    "structured_locations": structured_locations
                 }
 
                 reward_fn = get_reward_function(reward_fn_args["fn"])
@@ -469,12 +397,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 # Don't truncate the response, just mask out the loss
                 if len(current_response_ids) > max_response_len:
                     for i in range(max_response_len, len(current_response_ids)):
-                        mask[i] = 0
-                
-                # mask loss completely from trajectories that exhausted all steps without calling the custom finish tool
-                if trajectory_exhausted_steps:
-                    logger.info("Trajectory exhausted all steps without calling the custom finish tool. Masking out loss from this rollout.")
-                    for i in range(len(mask)):
                         mask[i] = 0
 
                 rollout_list.append(
