@@ -25,6 +25,10 @@ dependencies = [
     "seaborn>=0.13.2",
     "gcsfs>=2025.3.0",
     "lmcache",
+    "jinja2",
+    "pandas",
+    "tqdm",
+    "lmnr>=0.7.24",
     # "flashinfer-python",
     # "flashinfer-jit-cache",
 ]

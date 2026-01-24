@@ -4,3 +4,7 @@
 [submodule "prime-rl"]
 	path = prime-rl
 	url = https://github.com/PrimeIntellect-ai/prime-rl
+[submodule "benchmarks"]
+	path = benchmarks
+	url = https://github.com/adityasoni9998/benchmarks.git
+	branch = agentic_code_search
