@@ -1,0 +1,6 @@
+{
+  "model": "openai/Qwen/Qwen3-4B",
+  "api_key": "dummy",
+  "base_url": "http://localhost:8000/v1",
+  "temperature": 0.0
+}

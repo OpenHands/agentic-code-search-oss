@@ -1,6 +1,98 @@
 # Evaluation Integration Documentation
 
-## Goal
+This document explains how to run evaluations for code localization agents using the integrated benchmarks system.
+
+## Quick Start
+
+### 1. Start a Local Model with vLLM
+
+Start vLLM with tool calling enabled:
+
+```bash
+# For a small model (quick testing)
+uv run vllm serve Qwen/Qwen3-4B \
+  --port 8000 \
+  --max-model-len 32768 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes
+
+### 2. Create LLM Config
+
+```bash
+mkdir -p configs
+cat > configs/llm_config.json << 'EOF'
+{
+  "model": "openai/Qwen/Qwen3-4B",
+  "api_key": "dummy",
+  "base_url": "http://localhost:8000/v1",
+  "temperature": 0.0
+}
+EOF
+```
+
+**Important:** The model name must be prefixed with `openai/` to tell litellm it's an OpenAI-compatible endpoint.
+
+### 3. Run Evaluation
+
+```bash
+./scripts/run_eval.sh \
+    --dataset_file benchmarks/gt_location.jsonl \
+    --llm-config-path configs/llm_config.json \
+    --system_prompt_file benchmarks/benchmarks/agentic_code_search/prompts/system_prompt.j2 \
+    --user_prompt_file benchmarks/benchmarks/agentic_code_search/prompts/file_module_short.j2 \
+    --tools terminal \
+    --max-iterations 10 \
+    --num-workers 1 \
+    --output-dir ./agentic_code_search_outputs \
+    --n-limit 1 \
+    --workspace_base_dir /tmp/testbed/
+```
+
+**Key options:**
+- `--n-limit 1` - Run on 1 instance (remove for full dataset)
+- `--num-workers 1` - Parallel workers (increase for faster eval)
+- `--max-iterations 10` - Max agent steps per instance
+
+### 4. Check Results
+
+```bash
+# View full output
+cat ./agentic_code_search_outputs/agentic_code_search_gt_location/openai/Qwen/Qwen3-4B_sdk_*/output.jsonl | jq .
+
+# View just the reward scores
+cat ./agentic_code_search_outputs/agentic_code_search_gt_location/openai/Qwen/Qwen3-4B_sdk_*/output.jsonl | jq '.test_result.reward'
+```
+
+### Example Output
+
+```json
+{
+  "file_reward": 0.5,
+  "module_reward": 0.5,
+  "entity_reward": 0.4,
+  "prediction": {
+    "files": ["sklearn/calibration.py", "sklearn/_config.py", "sklearn/isotonic.py"],
+    "modules": ["sklearn/calibration.py:_CalibratedClassifier", "sklearn/_config.py:set_config", "sklearn/isotonic.py:IsotonicRegression"],
+    "entities": ["sklearn/isotonic.py:IsotonicRegression.predict", "sklearn/_config.py:set_config", "sklearn/calibration.py:_CalibratedClassifier.predict_proba"]
+  },
+  "ground_truth": {
+    "files": ["sklearn/isotonic.py"],
+    "modules": ["sklearn/isotonic.py:IsotonicRegression"],
+    "entities": ["sklearn/isotonic.py:IsotonicRegression.predict", "sklearn/isotonic.py:IsotonicRegression.transform"]
+  }
+}
+```
+
+**Metrics explained:**
+- **file_reward** - F1 score for file-level localization
+- **module_reward** - F1 score for class-level localization  
+- **entity_reward** - F1 score for function/method-level localization
+
+---
+
+## Implementation Details
+
+### Goal
 
 Integrate evaluation code from the [benchmarks repo](https://github.com/adityasoni9998/benchmarks/tree/agentic_code_search) into this repository to enable end-to-end training AND evaluation of code localization agents.
 
@@ -9,8 +101,6 @@ Integrate evaluation code from the [benchmarks repo](https://github.com/adityaso
 - Run trained models on SWE-Bench Pro/Verified benchmarks
 - Use the same `software-agent-sdk` for both training and evaluation
 - No dependency conflicts with existing SkyRL training setup
-
-## Solution Approach
 
 ### The Problem
 
@@ -37,7 +127,20 @@ from benchmarks.agentic_code_search.run_infer import main
 - Our SDK packages are already installed via uv workspace
 - Python finds our SDK first, not benchmarks' vendor/ (which doesn't exist anyway)
 
-## Files Added/Modified
+### Version Module Patching
+
+The benchmarks code has a `version.py` that tries to get the SDK SHA from `vendor/software-agent-sdk` (which doesn't exist in our setup). The `eval_runner.py` script pre-creates this module with the SHA from our repo's SDK:
+
+```python
+# Pre-create the version module with our SDK SHA before benchmarks imports it
+_sdk_sha = _get_sdk_sha_from_parent_repo()
+_version_module = ModuleType("benchmarks.utils.version")
+_version_module.SDK_SHA = _sdk_sha
+_version_module.SDK_SHORT_SHA = _sdk_sha[:7]
+sys.modules["benchmarks.utils.version"] = _version_module
+```
+
+### Files Added/Modified
 
 | File                     | Description                                                             |
 | ------------------------ | ----------------------------------------------------------------------- |
@@ -47,7 +150,7 @@ from benchmarks.agentic_code_search.run_infer import main
 | `scripts/eval_runner.py` | Python wrapper that sets up sys.path and runs eval                      |
 | `scripts/run_eval.sh`    | Shell wrapper for `uv run`                                              |
 
-## Architecture
+### Architecture
 
 ```
 agentic-code-search-oss/
@@ -67,7 +170,7 @@ agentic-code-search-oss/
 └── src/                          # Training code (unchanged)
 ```
 
-## How Evaluation Works
+### How Evaluation Works
 
 ```
 ┌─────────────────┐
@@ -90,99 +193,47 @@ agentic-code-search-oss/
 └─────────────────────────────────┘
 ```
 
-## Learnings
+### Learnings
 
 1. **uv workspaces don't nest** - Can't add a package with its own workspace as a member
 2. **sys.path manipulation is clean** - Keeps submodule pristine, easy to update
 3. **Python import resolution** - First match in sys.path wins, so our installed SDK is used
 4. **Dependency isolation** - We only add deps we actually need, avoiding conflicts
+5. **Version module patching** - Pre-create the version module to use our repo's SDK SHA
+6. **litellm provider prefix** - Local vLLM endpoints need `openai/` prefix in model name
+7. **vLLM tool calling** - Requires `--enable-auto-tool-choice --tool-call-parser hermes` flags
 
-## What to Test
+---
 
-### On Linux with CUDA (training machine)
+## Troubleshooting
 
-1. **Sync dependencies:**
+### "LLM Provider NOT provided"
 
-   ```bash
-   uv sync
-   ```
-
-2. **Test import works:**
-
-   ```bash
-   uv run python -c "
-   import sys
-   sys.path.insert(0, 'benchmarks')
-   from benchmarks.agentic_code_search.run_infer import main
-   print('Import successful!')
-   "
-   ```
-
-3. **Run a minimal evaluation:**
-
-   ```bash
-   # Create LLM config file first
-   cat > configs/llm_config.json << 'EOF'
-   {
-     "model": "openai/gpt-4o-mini",
-     "api_key": "your-api-key",
-     "base_url": "https://api.openai.com/v1",
-     "temperature": 0.0
-   }
-   EOF
-
-   # Run eval on 1 instance
-   ./scripts/run_eval.sh \
-     --dataset_file benchmarks/gt_location.jsonl \
-     --llm-config-path configs/llm_config.json \
-     --max-iterations 10 \
-     --num-workers 1 \
-     --tools terminal \
-     --n-limit 1
-   ```
-
-4. **Verify training still works:**
-   ```bash
-   # Your existing training command should work unchanged
-   bash scripts/run_async_training.sh -m Qwen/Qwen3-4B -d $DATA_PATH
-   ```
-
-### Expected Output Format
-
-The evaluation produces JSONL output with F1 scores for:
-
-- **File-level**: Did the agent find the correct files?
-- **Module-level**: Did it find the correct classes?
-- **Entity-level**: Did it find the correct functions/methods?
-
-Example output:
-
+Add `openai/` prefix to your model name in `llm_config.json`:
 ```json
-{
-  "instance_id": "astropy__astropy-12907",
-  "test_result": {
-    "reward": {
-      "file_reward": 1.0,
-      "module_reward": 0.8,
-      "entity_reward": 0.6
-    },
-    "raw_prediction": "astropy/modeling/separable.py\nfunction: _cstack",
-    "wall_time_seconds": 45.2,
-    "num_steps": 5,
-    "num_tool_calls": 12
-  }
-}
+{"model": "openai/Qwen/Qwen3-4B", ...}
 ```
 
-## Next Steps
+### "auto tool choice requires --enable-auto-tool-choice"
 
-1. **Test on training machine** - Verify uv sync works with CUDA deps
-2. **Prepare SWE-Bench Pro/Verified datasets** - May need to download separately
-3. **Run base model evals** - Establish baseline before training
-4. **Integrate with training loop** - Optional: run evals at checkpoints
+Restart vLLM with tool calling flags:
+```bash
+uv run vllm serve Qwen/Qwen3-4B \
+  --port 8000 \
+  --enable-auto-tool-choice \
+  --tool-call-parser hermes
+```
 
-## References
+### "Processing 0 instances"
 
-- [Benchmarks repo](https://github.com/adityasoni9998/benchmarks/tree/agentic_code_search)
-- [Original Slack conversation](#) - Aditya's integration instructions
-- [SWE-Bench](https://www.swebench.com/) - Benchmark website
+Previous failed runs left stale output. Delete the output directory:
+```bash
+rm -rf ./agentic_code_search_outputs/
+```
+
+### Import errors from benchmarks
+
+Ensure the submodule is initialized:
+```bash
+git submodule update --init --recursive
+```
