@@ -2,9 +2,10 @@
 
 ## Goal
 
-Integrate evaluation code from the [benchmarks repo](https://github.com/adityasoni9998/benchmarks/tree/agentic_code_search) into this repository to enable end-to-end training AND evaluation of code localization agents for the ICML submission.
+Integrate evaluation code from the [benchmarks repo](https://github.com/adityasoni9998/benchmarks/tree/agentic_code_search) into this repository to enable end-to-end training AND evaluation of code localization agents.
 
 **Key requirements:**
+
 - Run trained models on SWE-Bench Pro/Verified benchmarks
 - Use the same `software-agent-sdk` for both training and evaluation
 - No dependency conflicts with existing SkyRL training setup
@@ -31,19 +32,20 @@ from benchmarks.agentic_code_search.run_infer import main
 ```
 
 **Why this works:**
+
 - When benchmarks code imports `openhands.sdk`, Python searches `sys.path`
 - Our SDK packages are already installed via uv workspace
 - Python finds our SDK first, not benchmarks' vendor/ (which doesn't exist anyway)
 
 ## Files Added/Modified
 
-| File | Description |
-|------|-------------|
-| `benchmarks/` | Git submodule pointing to adityasoni9998/benchmarks@agentic_code_search |
-| `.gitmodules` | Submodule configuration |
-| `pyproject.toml` | Added jinja2, pandas, tqdm, lmnr dependencies |
-| `scripts/eval_runner.py` | Python wrapper that sets up sys.path and runs eval |
-| `scripts/run_eval.sh` | Shell wrapper for `uv run` |
+| File                     | Description                                                             |
+| ------------------------ | ----------------------------------------------------------------------- |
+| `benchmarks/`            | Git submodule pointing to adityasoni9998/benchmarks@agentic_code_search |
+| `.gitmodules`            | Submodule configuration                                                 |
+| `pyproject.toml`         | Added jinja2, pandas, tqdm, lmnr dependencies                           |
+| `scripts/eval_runner.py` | Python wrapper that sets up sys.path and runs eval                      |
+| `scripts/run_eval.sh`    | Shell wrapper for `uv run`                                              |
 
 ## Architecture
 
@@ -100,11 +102,13 @@ agentic-code-search-oss/
 ### On Linux with CUDA (training machine)
 
 1. **Sync dependencies:**
+
    ```bash
    uv sync
    ```
 
 2. **Test import works:**
+
    ```bash
    uv run python -c "
    import sys
@@ -115,6 +119,7 @@ agentic-code-search-oss/
    ```
 
 3. **Run a minimal evaluation:**
+
    ```bash
    # Create LLM config file first
    cat > configs/llm_config.json << 'EOF'
@@ -145,11 +150,13 @@ agentic-code-search-oss/
 ### Expected Output Format
 
 The evaluation produces JSONL output with F1 scores for:
+
 - **File-level**: Did the agent find the correct files?
 - **Module-level**: Did it find the correct classes?
 - **Entity-level**: Did it find the correct functions/methods?
 
 Example output:
+
 ```json
 {
   "instance_id": "astropy__astropy-12907",
