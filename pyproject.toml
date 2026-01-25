@@ -52,40 +52,36 @@ dev = [
 
 [tool.uv]
 override-dependencies = [
-    "flash-attn",
+    # "flash-attn",  # Removed - managed via pip to avoid version mismatch issues
     # "anthropic>=0.72.1",
     # "openai>=2.8.0",
     # "torch==2.8.0",
     # "torchvision==0.23.0",
     # "torchaudio==2.8.0",
 ]
-extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
-
+# extra-build-variables = { flash-attn = { FLASH_ATTENTION_SKIP_CUDA_BUILD = "TRUE" } }
+no-build-isolation-package = ['flash-attn']
 
 [[tool.uv.index]]
 name = "pytorch-cu128"
 url = "https://download.pytorch.org/whl/cu128"
 explicit = true
 
-[[tool.uv.index]]
-name = "flashinfer-cu128"
-url = "https://flashinfer.ai/whl/cu128"
-explicit = true
-
 [tool.uv.extra-build-dependencies]
 flash-attn = ["torch"]
 
 [tool.uv.sources]
-# skyrl-train = { git = "https://github.com/NovaSky-AI/SkyRL", rev = "69ca4d9", subdirectory = "skyrl-train" }
-skyrl-train = { path = "/project/flame/lsutawik/cso/SkyRL/skyrl-train", editable = true  }
-flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}
+skyrl-train = { git = "https://github.com/lintangsutawika/SkyRL", branch = "cso-working", subdirectory = "skyrl-train" }
+# skyrl-train = { git = "https://github.com/adityasoni9998/SkyRL.git", rev = "81e5a97c7430503c0c4e6508497cc5aa01a0c624", subdirectory = "skyrl-train" }
+# skyrl-train = { path = "/project/flame/lsutawik/cso/SkyRL/skyrl-train", editable = true  }
+# flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}  # Managed via pip
 openhands-sdk = { workspace = true }
 openhands-tools = { workspace = true }
 openhands-workspace = { workspace = true }
 openhands-agent-server = { workspace = true }
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
-flashinfer-jit-cache = { index = "flashinfer-cu128" }
+# flashinfer-jit-cache = { index = "flashinfer-cu128" }
 # flashinfer-python = [
 #     { url = "https://download.pytorch.org/whl/cu128/flashinfer/flashinfer_python-0.2.6.post1%2Bcu128torch2.7-cp39-abi3-linux_x86_64.whl" }
 # ]

@@ -57,6 +57,7 @@ NUM_TRAINING_ENGINES="${NUM_TRAINING_ENGINES:-$NUM_GPUS}"
 export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
+export RAY_worker_register_timeout_seconds=600
 
 
 uv run python -m src.train \
@@ -101,12 +102,12 @@ uv run python -m src.train \
   trainer.export_path="${CKPT_PATH}exported_model/" \
   trainer.hf_save_interval=5 \
   trainer.ckpt_interval=5 \
-  trainer.max_prompt_length=4096 \
+  trainer.max_prompt_length=32768 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
   generator.max_input_length=32768 \
   generator.max_num_batched_tokens=131072 \
-  generator.max_turns=4 \
+  generator.max_turns=6 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=False \
   generator.backend=vllm \
@@ -120,7 +121,7 @@ uv run python -m src.train \
   generator.n_samples_per_prompt=${N_ROLLOUTS} \
   generator.gpu_memory_utilization=0.75 \
   generator.enforce_eager=false \
-  trainer.step_wise_training=true \
+  trainer.step_wise_training=false \
   trainer.logger="wandb" \
   trainer.project_name="code_search" \
   trainer.run_name=${RUN_NAME} \
