@@ -7,7 +7,7 @@
 #   [-s ckpt_path] [-n n_rollouts] [-i num_inference_engines] [-t num_training_engines]
 #
 
-. .env 2>/dev/null || true
+# . .env 2>/dev/null || true
 
 while getopts ":m:r:n:d:s:o:i:t:b:" opt; do
   case ${opt} in
@@ -57,10 +57,10 @@ NUM_TRAINING_ENGINES="${NUM_TRAINING_ENGINES:-$NUM_GPUS}"
 export VLLM_FLASH_ATTN_VERSION=2
 export CUDA_LAUNCH_BLOCKING=1
 export TORCH_USE_CUDA_DSA=1
-export RAY_worker_register_timeout_seconds=600
+export RAY_worker_register_timeout_seconds=1200
 
 
-uv run python -m src.train \
+uv run --isolated -m src.train \
   +run_async_trainer=false \
   +use_distillation=true \
   data.train_data="['$DATA_PATH/train.parquet']" \
@@ -87,12 +87,14 @@ uv run python -m src.train \
   generator.inference_engine_tensor_parallel_size=1 \
   +generator.traj_dir=${CKPT_PATH}trajectories/ \
   +generator.engine_init_kwargs.enable_auto_tool_choice=true \
-  +generator.engine_init_kwargs.tool_call_parser=hermes \
+  +generator.engine_init_kwargs.tool_call_parser="hermes" \
   +generator.engine_init_kwargs.reasoning_parser=qwen3 \
+  +generator.prompts.system_prompt="templates/system_prompt_custom_finish.j2" \
+  +generator.prompts.user_prompt="templates/file_module_custom_finish.j2" \
   trainer.epochs=20 \
   trainer.eval_batch_size=100 \
   trainer.eval_before_train=false \
-  trainer.eval_interval=100 \
+  trainer.eval_interval=-1 \
   trainer.update_epochs_per_batch=1 \
   trainer.train_batch_size=${BATCH_SIZE} \
   trainer.policy_mini_batch_size=${BATCH_SIZE} \
@@ -100,14 +102,14 @@ uv run python -m src.train \
   trainer.micro_train_batch_size_per_gpu=${MICRO_BATCH_SIZE:-1} \
   trainer.dump_data_batch=true \
   trainer.export_path="${CKPT_PATH}exported_model/" \
-  trainer.hf_save_interval=5 \
-  trainer.ckpt_interval=5 \
+  trainer.hf_save_interval=50 \
+  trainer.ckpt_interval=10 \
   trainer.max_prompt_length=32768 \
   generator.sampling_params.max_generate_length=${MAX_LENGTH} \
   generator.sampling_params.temperature=1.0 \
   generator.max_input_length=32768 \
   generator.max_num_batched_tokens=131072 \
-  generator.max_turns=6 \
+  generator.max_turns=8 \
   trainer.policy.optimizer_config.lr=1.0e-6 \
   trainer.algorithm.use_kl_loss=False \
   generator.backend=vllm \
@@ -119,7 +121,7 @@ uv run python -m src.train \
   generator.async_engine=true \
   generator.batched=false \
   generator.n_samples_per_prompt=${N_ROLLOUTS} \
-  generator.gpu_memory_utilization=0.75 \
+  generator.gpu_memory_utilization=0.8 \
   generator.enforce_eager=false \
   trainer.step_wise_training=false \
   trainer.logger="wandb" \
