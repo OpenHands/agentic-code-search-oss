@@ -20,7 +20,6 @@ from openhands.sdk import (
 )
 from openhands.sdk.tool import ToolExecutor, ToolAnnotations
 from openhands.sdk.conversation.state import ConversationExecutionStatus
-from src.tools import tool
 
 if TYPE_CHECKING:
     from openhands.sdk.conversation.base import BaseConversation
@@ -42,8 +41,6 @@ class LocalizationFinishAction(Action):
 - function_name: Function/method name (optional, omit for changes that edit parts of a file outside of any particular function)
 """
     )
-
-    # message: str = Field(description="Code localization submission sent to the user.")
 
     @property
     def visualize(self) -> Text:
@@ -163,13 +160,4 @@ class LocalizationFinishTool(ToolDefinition[LocalizationFinishAction, Localizati
                 ),
             )
         ]
-
-@tool(name="localization_finish")
-def _make_localization_finish_tool() -> list[ToolDefinition]:
-    """Create localization finish tool.
-
-    This is a localization-specific finish tool that accepts structured locations
-    and validates the output format.
-    """
-    return LocalizationFinishTool.create()
     

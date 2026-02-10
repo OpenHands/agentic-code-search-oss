@@ -59,7 +59,6 @@ def patched_concatenate_generator_outputs(generator_outputs: List[GeneratorOutpu
         logger.info(f"Attempting to concatenate values for additional keys {additional_keys}")
     for key in additional_keys:
         try:
-            # result[key] = sum([generator_output[key] for generator_output in generator_outputs], [])
             additional_result[key] = np.mean([generator_output[key] for generator_output in generator_outputs]).item()
         except Exception as e:
             logger.error(f"Error in aggregating key {key}: {e}", exc_info=True)
@@ -71,10 +70,6 @@ def patched_concatenate_generator_outputs(generator_outputs: List[GeneratorOutpu
     # Validate the generator output using the number of prompts
     # Import here to avoid circular dependency.
     from skyrl_train.utils.trainer_utils import validate_generator_output
-
-    # print("trajectory_ids", result["trajectory_ids"])
-    # print("rewards", result["rewards"])
-    # print("is_last_step", result["is_last_step"])
 
     num_prompts = len(result["prompt_token_ids"])
     validate_generator_output(num_prompts, result)
@@ -130,19 +125,6 @@ class CustomFullyAsyncRayPPOTrainer(FullyAsyncRayPPOTrainer):
         step_wise_training = self.cfg.trainer.step_wise_training
         self.cfg.trainer.step_wise_training = False
         generator_output = self.postprocess_generator_output(generator_output, uids)
-
-        # # Truncate prompt_token_ids to avoid OOM
-        # max_prompt_len = self.cfg.trainer.max_prompt_length
-        # if max_prompt_len == -1:
-        #     pass
-        # else:
-        #     truncated_prompt_token_ids = []
-        #     for prompt_ids in generator_output["prompt_token_ids"]:
-        #         if len(prompt_ids) > max_prompt_len:
-        #             truncated_prompt_token_ids.append(prompt_ids[-max_prompt_len:])
-        #         else:
-        #             truncated_prompt_token_ids.append(prompt_ids)
-        #     generator_output["prompt_token_ids"] = truncated_prompt_token_ids
 
         # print example just for debugging
         vis = self.tokenizer.decode(generator_output["response_ids"][0])

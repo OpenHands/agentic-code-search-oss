@@ -64,7 +64,6 @@ from src.utils.instance import clone_instance
 from src.agent.agent import CustomAgent
 
 from src.rewards import get_reward_function
-# from src.tools import TOOL_REGISTRY
 
 from src.metrics.efficiency_metrics import compute_all_efficiency_metrics
 from src.metrics.trajectory_metrics import compute_trajectory_metrics
@@ -73,7 +72,6 @@ import logging
 import signal
 
 logger = get_logger(__name__)
-# logger.setLevel(logging.WARNING)
 logger.setLevel(logging.ERROR)
 
 file_path = os.path.dirname(__file__)
@@ -142,20 +140,8 @@ def init_and_run(
     structured_locations = None
     messages = []
 
-    # for tool_name in generator_cfg.tools:
-    #     if tool_name in TOOL_REGISTRY:
-    #         register_tool(tool_name, TOOL_REGISTRY[tool_name])
-    #     else:
-    #         raise ValueError(f"Tool {tool_name} does not exist in the registry")
-
-    # tools = [
-    #     Tool(name=tool_name) for tool_name in generator_cfg.tools
-    # ]
-
     register_tool(LocalizationFinishTool.name, LocalizationFinishTool)
     tools = [
-        # Tool(name=GlobTool.name),
-        # Tool(name=GrepTool.name),
         Tool(name=TerminalTool.name),
         Tool(name="localization_finish"),
     ]
@@ -185,7 +171,6 @@ def init_and_run(
             }
         ),
         tools=tools,
-        # security_analyzer=None,
         system_prompt_filename=system_prompt_path
     )
 
@@ -268,17 +253,11 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         self.generator_cfg = generator_cfg
         self.tokenizer = tokenizer
         self.model_name = model_name
-        # self.litellm_model_name = "openai/" + self.model_name
         self.litellm_model_name = "openai/" + self.model_name
-
-        # if self.generator_cfg.chat_template.name_or_path is not None:
-        #     raise NotImplementedError(
-        #         "OpenhandsGenerator doesn't support custom chat template"
-        #     )
 
         self.step_wise = step_wise
         self.max_train_length = generator_cfg.get(
-            "max_train_length", 32768
+            "max_train_length", 100000
         )
 
     def sanity_check_last_step(self, token_messages):
@@ -312,7 +291,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
         trajectory_id: TrajectoryID,
         batch_metadata: BatchMetadata,
     ) -> Tuple[List[int], float, str, List[int], List[int], Optional[List[int]], Optional[Dict[str, Any]]]:
-        # sweagent_config = yaml.safe_load(get_config_path(self.generator_cfg.miniswe_config_path).read_text())
         # NOTE (sumanthrh): Input `prompt` is not used here because mini-swe-agent uses a similar entry from the `instance` obj
         instance = env_extras
         error = None
@@ -340,12 +318,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 "start_timestamp": None,
                 "end_timestamp": None
             }
-
-        # print("=" * 100)
-        # print("Conversation finished. Got the following LLM messages:")
-        # for i, message in enumerate(messages):
-        #     print(f"Message {i}: {str(message)[:100]}")
-        # print("Final message:", final_message)
 
         # Run sanity check before computing the reward so that the logged metrics reflect the actual reward received in training
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
@@ -415,7 +387,6 @@ class CodeSearchGenerator(SkyRLGymGenerator):
 
         token_messages = [msg for msg in messages if msg["kind"] == "TokenEvent"]
         rollout_list = []
-        num_steps = len(token_messages)
         if len(token_messages) > 0:
             if self.step_wise:
                 for idx, message in enumerate(token_messages):
@@ -447,6 +418,8 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 max_response_len = max_train_len - len(current_prompt_ids)
 
                 buffer_succeed = 5  # buffer tokens after assistant tag
+                if "Qwen3-4B-Instruct-2507" in self.model_name:
+                    buffer_succeed = 1 #NOTE: 4B-Instruct doesn't have <think> tokens so only the subsequent \n needs masking.
                 buffer_precede = 1  # buffer tokens before im_start tag
                 # make mask of 0 for everything inside <|im_start|> 
                 # and assistant and 1 elsewhere 
@@ -455,6 +428,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                 mask = []
                 inside = False
                 buffer = 0
+                found_role_switch = False
                 for token_id in current_response_ids:
                     if token_id == start_token_id:
                         inside = True
@@ -462,7 +436,7 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                             mask.pop()
                         mask.extend([0] * buffer_precede)
                         mask.append(0)
-                    elif token_id == end_token_id:
+                    elif token_id == end_token_id and found_role_switch:
                         inside = False
                         mask.append(0)
                         buffer = buffer_succeed
@@ -474,12 +448,14 @@ class CodeSearchGenerator(SkyRLGymGenerator):
                             buffer -= 1
                         else:
                             mask.append(1)
+                    
+                    found_role_switch = True if token_id == end_token_id else False
 
                 # mask zero out everything beyond max_response_len
                 # Don't truncate the response, just mask out the loss
-                if len(current_response_ids) > max_response_len:
-                    for i in range(max_response_len, len(current_response_ids)):
-                        mask[i] = 0
+                # if len(current_response_ids) > max_response_len:
+                #     for i in range(max_response_len, len(current_response_ids)):
+                #         mask[i] = 0
                 
                 # mask loss completely from trajectories that exhausted all steps without calling the custom finish tool
                 if trajectory_exhausted_steps:
