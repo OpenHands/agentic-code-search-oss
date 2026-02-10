@@ -3,15 +3,12 @@ import os
 
 from datasets import load_dataset
 
-# from src.utils.dataset import extract_functions_from_patch
-
-
 def main():
     parser = argparse.ArgumentParser(description="Build dataset from patches")
     parser.add_argument("--dataset", default="adityasoni17/SWE-smith-py-code-search", help="Input dataset path")
     parser.add_argument("--split", default="train", help="Dataset split to use")
     parser.add_argument("--output", required=True, help="Output file path for processed dataset")
-    parser.add_argument("--use_patch", action="store_true", help="Whether to use patches to extract target functions")
+    parser.add_argument("--use_patch", action="store_true", help="Whether to apply patch after pulling the repo (only set to true for SWE-Smith whose patch actually introduces the bug)")
     args = parser.parse_args()
 
     # Load and process dataset
@@ -43,7 +40,6 @@ def main():
     # shuffle dataset
     dataset = dataset.sample(frac=1, random_state=42).reset_index(drop=True)
 
-    # train_size = int(0.975 * len(dataset))
     train_dataset = dataset.iloc[:-100]
     validation_dataset = dataset.iloc[-100:]
 

@@ -28,8 +28,11 @@ def compute_token_metrics(messages: List[Dict[str, Any]]) -> Dict[str, float]:
             "avg_prompt_tokens_per_step": 0.0,
             "avg_response_tokens_per_step": 0.0,
         }
-
-    total_prompt_tokens = sum(len(msg.get("prompt_token_ids", [])) for msg in token_messages)
+    if len(token_messages) > 0:
+        total_prompt_tokens = len(token_messages[-1].get("prompt_token_ids", []))
+    else:
+        total_prompt_tokens = 0
+    # total_prompt_tokens = sum(len(msg.get("prompt_token_ids", [])) for msg in token_messages)
     total_response_tokens = sum(len(msg.get("response_token_ids", [])) for msg in token_messages)
 
     num_steps = len(token_messages)

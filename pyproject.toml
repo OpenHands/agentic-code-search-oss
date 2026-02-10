@@ -78,21 +78,13 @@ flash-attn = ["torch"]
 [tool.uv.sources]
 skyrl-train = { git = "https://github.com/adityasoni9998/SkyRL.git", rev = "81e5a97c7430503c0c4e6508497cc5aa01a0c624", subdirectory = "skyrl-train" }
 flash-attn = {url = "https://github.com/Dao-AILab/flash-attention/releases/download/v2.8.3/flash_attn-2.8.3+cu12torch2.8cxx11abiTRUE-cp313-cp313-linux_x86_64.whl"}
-openhands-sdk = { workspace = true }
-openhands-tools = { workspace = true }
-openhands-workspace = { workspace = true }
-openhands-agent-server = { workspace = true }
+openhands-sdk = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "85ecfd9333d2d2cc4404dd460fd38868d9b978e2", subdirectory = "openhands-sdk" }
+openhands-tools = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "85ecfd9333d2d2cc4404dd460fd38868d9b978e2", subdirectory = "openhands-tools" }
+openhands-workspace = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "85ecfd9333d2d2cc4404dd460fd38868d9b978e2", subdirectory = "openhands-workspace" }
+openhands-agent-server = { git = "https://github.com/OpenHands/software-agent-sdk.git", rev = "85ecfd9333d2d2cc4404dd460fd38868d9b978e2", subdirectory = "openhands-agent-server" }
 torch = { index = "pytorch-cu128" }
 torchvision = { index = "pytorch-cu128" }
 flashinfer-jit-cache = { index = "flashinfer-cu128" }
 # flashinfer-python = [
 #     { url = "https://download.pytorch.org/whl/cu128/flashinfer/flashinfer_python-0.2.6.post1%2Bcu128torch2.7-cp39-abi3-linux_x86_64.whl" }
 # ]
-
-[tool.uv.workspace]
-members = [
-  "software-agent-sdk/openhands-sdk",
-  "software-agent-sdk/openhands-tools",
-  "software-agent-sdk/openhands-workspace",
-  "software-agent-sdk/openhands-agent-server",
-]
