@@ -1,3 +1,0 @@
-reward:
-  - fn: multilevel_localization_f1_reward
-    weight: 1.0
